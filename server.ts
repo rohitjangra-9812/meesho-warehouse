@@ -88,6 +88,9 @@ async function startServer() {
   // POST /api/inventory/seed: Seed 10000 products
   app.post("/api/inventory/seed", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
+      const check = await db.select().from(products).limit(1);
+      if (check.length > 0) return res.json({ message: "Already seeded" });
+
       const districts = [
         "Gurugram", "Faridabad", "Rohtak", "Hisar", "Karnal", "Panipat", "Sonipat", 
         "Panchkula", "Ambala", "Yamunanagar", "Sirsa", "Fatehabad", "Jind", "Kaithal", 
@@ -175,6 +178,9 @@ async function startServer() {
   // POST /api/employees/seed: Seed 347 employees
   app.post("/api/employees/seed", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
+      const check = await db.select().from(employees).limit(1);
+      if (check.length > 0) return res.json({ message: "Already seeded" });
+
       const positions = [
         "Scanning", "Packing", "Security Guard", "Caretaker", "Maintenance", "Office Department", "Loading/Unloading", "Quality Check", "Shift Supervisor"
       ];
@@ -211,7 +217,6 @@ async function startServer() {
         });
       }
 
-      await db.delete(employees);
       await db.insert(employees).values(itemsToInsert);
       res.json({ message: "Successfully seeded 347 employees" });
     } catch (error) {
@@ -233,6 +238,9 @@ async function startServer() {
   // POST /api/management/seed: Seed management directory
   app.post("/api/management/seed", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
+      const check = await db.select().from(management).limit(1);
+      if (check.length > 0) return res.json({ message: "Already seeded" });
+
       const leaders = [
         {
           name: "Insp Rohit Jangra",
@@ -308,7 +316,6 @@ async function startServer() {
         }
       ];
 
-      await db.delete(management);
       await db.insert(management).values(leaders);
       res.json({ message: "Successfully seeded management directory" });
     } catch (error) {
