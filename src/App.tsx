@@ -20,7 +20,7 @@ import { FulfillmentScreen } from './components/FulfillmentScreen.tsx';
 import { TreasuryScreen } from './components/TreasuryScreen.tsx';
 import { DockManagementScreen } from './components/DockManagementScreen.tsx';
 import { ScannerHubScreen } from './components/ScannerHubScreen.tsx';
-import { Boxes, LogOut, Users, Briefcase, FileText, IndianRupee, Clock, Activity, Truck, Shield, MapPin, PackageOpen, Landmark, Navigation, ScanBarcode } from 'lucide-react';
+import { Boxes, LogOut, Users, Briefcase, FileText, IndianRupee, Clock, Activity, Truck, Shield, MapPin, PackageOpen, Landmark, Navigation, ScanBarcode, Cloud, RefreshCw, CheckCircle2, Database } from 'lucide-react';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -102,6 +102,32 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { logout } = useContext(AuthContext);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(new Date());
+
+  useEffect(() => {
+    const syncData = async () => {
+      try {
+        setIsSyncing(true);
+        await fetchApi('/auth/sync', { method: 'POST' });
+        setLastSynced(new Date());
+      } catch (e) {
+        console.error("Sync failed", e);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+    
+    syncData();
+    const interval = setInterval(syncData, 60000);
+    
+    const handleRefresh = () => syncData();
+    window.addEventListener('auto-refresh', handleRefresh);
+    return () => {
+       clearInterval(interval);
+       window.removeEventListener('auto-refresh', handleRefresh);
+    };
+  }, []);
   
   const navItems = [
     { path: '/analytics', label: 'Analytics', icon: Activity },
@@ -191,8 +217,26 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
           })}
       </div>
 
-      <main className="flex-1 overflow-auto pb-16 md:pb-0">
-        <div className="p-6 md:p-8 max-w-7xl mx-auto h-full">
+      <main className="flex-1 flex flex-col overflow-hidden pb-16 md:pb-0">
+        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 md:px-6 py-3 flex items-center justify-between z-10 sticky top-0">
+          <div className="flex items-center gap-2">
+             <h2 className="text-lg font-semibold text-gray-800 md:hidden">Meesho WMS</h2>
+          </div>
+          <div className="flex items-center gap-3 ml-auto">
+             <div className="flex items-center gap-2 text-sm bg-white px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">
+                {isSyncing ? (
+                  <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                )}
+                <span className="text-gray-600 font-medium">
+                   {isSyncing ? 'Syncing...' : `Synced ${lastSynced ? lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`}
+                </span>
+                {!isSyncing && <Database className="w-3.5 h-3.5 text-gray-400 ml-1" />}
+             </div>
+          </div>
+        </header>
+        <div className="flex-1 overflow-auto p-6 md:p-8 max-w-7xl mx-auto w-full h-full">
           {children}
         </div>
       </main>
