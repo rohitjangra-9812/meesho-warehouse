@@ -229,29 +229,38 @@ export function ScannerHubScreen() {
             </h3>
             <div className="space-y-3">
               {scanners.map(scanner => (
-                <div key={scanner.id} className="p-4 border rounded-xl bg-gray-50 border-gray-200">
+                <div key={scanner.id} className={`p-4 border rounded-xl ${scanner.batteryLevel < 20 ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'}`}>
                   <div className="flex justify-between items-start mb-3">
                     <div>
-                      <h4 className="font-bold text-gray-900 text-sm">{scanner.name}</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">{scanner.type} • {scanner.location}</p>
+                      <div className="flex items-center gap-2">
+                        <h4 className={`font-bold text-sm ${scanner.batteryLevel < 20 ? 'text-red-900' : 'text-gray-900'}`}>{scanner.name}</h4>
+                        {scanner.batteryLevel < 20 && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 border border-red-200 uppercase tracking-wider">
+                            Low Battery
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-xs mt-0.5 ${scanner.batteryLevel < 20 ? 'text-red-600/80' : 'text-gray-500'}`}>{scanner.type} • {scanner.location}</p>
                     </div>
                     {scanner.status === 'Online' ? (
-                      <Wifi className="w-4 h-4 text-green-500" />
+                      <Wifi className={`w-4 h-4 ${scanner.batteryLevel < 20 ? 'text-red-400' : 'text-green-500'}`} />
                     ) : (
-                      <WifiOff className="w-4 h-4 text-gray-400" />
+                      <WifiOff className={`w-4 h-4 ${scanner.batteryLevel < 20 ? 'text-red-300' : 'text-gray-400'}`} />
                     )}
                   </div>
                   
                   <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-1.5 text-gray-600">
+                    <div className={`flex items-center gap-1.5 ${scanner.batteryLevel < 20 ? 'text-red-700' : 'text-gray-600'}`}>
                       {getBatteryIcon(scanner.batteryLevel)}
                       <span className="font-medium text-xs">{scanner.batteryLevel}%</span>
                     </div>
                     
                     <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                      scanner.status === 'Online' ? 'bg-green-100 text-green-700' :
-                      scanner.status === 'Offline' ? 'bg-red-100 text-red-700' :
-                      'bg-orange-100 text-orange-700'
+                      scanner.status === 'Online' 
+                        ? scanner.batteryLevel < 20 ? 'bg-red-100/50 text-red-700' : 'bg-green-100 text-green-700'
+                        : scanner.status === 'Offline' 
+                          ? 'bg-red-100 text-red-700' 
+                          : 'bg-orange-100 text-orange-700'
                     }`}>
                       {scanner.status}
                     </span>

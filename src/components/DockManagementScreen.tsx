@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchApi } from '../lib/api.ts';
-import { Truck, Clock, CalendarCheck, CalendarRange, Navigation, Settings, Plus, X } from 'lucide-react';
+import { Truck, Clock, CalendarCheck, CalendarRange, Navigation, Settings, Plus, X, AlertTriangle } from 'lucide-react';
 
 interface DockDoor {
   id: number;
@@ -34,6 +34,19 @@ export function DockManagementScreen() {
   const [newVehicle, setNewVehicle] = useState({
     vehicleNumber: '', carrierName: '', type: 'Inbound', driverName: '', driverContact: '', scheduledTime: ''
   });
+  
+  const [alertDismissed, setAlertDismissed] = useState(false);
+
+  const totalDoors = doors.length;
+  const occupiedDoors = doors.filter(d => d.status === 'Occupied').length;
+  const occupancyRate = totalDoors > 0 ? (occupiedDoors / totalDoors) : 0;
+  const showCapacityAlert = occupancyRate > 0.8 && !alertDismissed;
+
+  useEffect(() => {
+    if (occupancyRate <= 0.8 && alertDismissed) {
+      setAlertDismissed(false);
+    }
+  }, [occupancyRate, alertDismissed]);
 
   const loadData = async () => {
     try {
@@ -161,6 +174,72 @@ export function DockManagementScreen() {
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Confirm Booking</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showCapacityAlert && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border-2 border-red-500">
+            <div className="bg-red-50 p-4 border-b border-red-100 flex items-start gap-3">
+              <div className="bg-red-100 p-2 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="flex-1 pt-0.5">
+                <h3 className="font-bold text-red-900 text-lg">High Dock Occupancy Alert</h3>
+                <p className="text-sm text-red-700">Dock capacity has exceeded 80% ({(occupancyRate * 100).toFixed(0)}% full). Review currently docked vehicles to expedite turnaround.</p>
+              </div>
+              <button onClick={() => setAlertDismissed(true)} className="text-red-400 hover:text-red-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-0 max-h-[60vh] overflow-y-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Dock</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Vehicle</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Type</th>
+                    <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {vehicles.filter(v => v.status === 'Docked').map(v => (
+                    <tr key={v.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900">
+                        {doors.find(d => d.id === v.dockDoorId)?.doorNumber || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-gray-900">{v.vehicleNumber}</span>
+                          <span className="text-xs text-gray-500">{v.carrierName}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${v.type === 'Inbound' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                          {v.type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                        <button onClick={() => updateStatus(v.id, 'Departed')} className="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 px-3 py-1.5 rounded-lg font-medium transition-colors">
+                          Release
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {vehicles.filter(v => v.status === 'Docked').length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-500">No vehicles currently docked.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button onClick={() => setAlertDismissed(true)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors">
+                Acknowledge & Close
+              </button>
+            </div>
           </div>
         </div>
       )}

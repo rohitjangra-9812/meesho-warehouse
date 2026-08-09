@@ -9,6 +9,31 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Auto-seed required data
+  try {
+    const existingDocks = await db.select().from(dockDoors).limit(1);
+    if (existingDocks.length === 0) {
+      const doors = Array.from({ length: 10 }, (_, i) => ({
+        doorNumber: `Dock-${(i + 1).toString().padStart(2, '0')}`,
+        status: i === 9 ? 'Maintenance' : 'Available',
+      }));
+      await db.insert(dockDoors).values(doors);
+      console.log("Seeded dock doors");
+    }
+    const existingAccounts = await db.select().from(treasuryAccounts).limit(1);
+    if (existingAccounts.length === 0) {
+       await db.insert(treasuryAccounts).values([
+         { accountName: 'SBI Primary Escrow', accountNumber: '3029192991', ifscCode: 'SBIN0004321', balance: 100000000, type: 'Operating' },
+         { accountName: 'HDFC Vendor Payout', accountNumber: '5010029399', ifscCode: 'HDFC0001234', balance: 100000000, type: 'Vendor' },
+       ]);
+       console.log("Seeded treasury accounts");
+    } else {
+       await db.execute(sql`UPDATE treasury_accounts SET balance = 100000000`);
+    }
+  } catch(e) {
+    console.error("Failed to auto-seed", e);
+  }
+
   app.use(express.json());
 
   // Middleware to capture activity logs
@@ -1230,6 +1255,222 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // 2 Minutes Interval: Hub Transfers
+  const run2mSim = async () => {
+    try {
+      const allHubs = await db.select().from(hubs).limit(10);
+      if (allHubs.length >= 2) {
+        const prod = await db.execute(sql`SELECT id FROM products ORDER BY RANDOM() LIMIT 50`);
+        const prodIds = (prod.rows || []).map(r => r.id as number);
+        const getProdId = () => prodIds.length > 0 ? prodIds[Math.floor(Math.random() * prodIds.length)] : 1;
+        
+        const transfers = [];
+        for(let i=0; i<60; i++) {
+           const h1 = allHubs[Math.floor(Math.random() * allHubs.length)].id;
+           let h2 = allHubs[Math.floor(Math.random() * allHubs.length)].id;
+           while(h1 === h2 && allHubs.length > 1) { h2 = allHubs[Math.floor(Math.random() * allHubs.length)].id; }
+           transfers.push({
+             fromHubId: h1,
+             toHubId: h2,
+             productId: getProdId(),
+             quantity: Math.floor(1 + Math.random() * 50),
+             status: ['Pending', 'In Transit', 'Completed'][Math.floor(Math.random()*3)],
+             waybill: `WB-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`,
+             dispatchDate: new Date(Date.now() - Math.floor(Math.random() * 86400000 * 5)).toISOString()
+           });
+        }
+        await db.insert(hubTransfers).values(transfers);
+      }
+    } catch (e) { console.error("2m sim error", e); }
+  };
+  setInterval(run2mSim, 2 * 60 * 1000);
+  setTimeout(run2mSim, 1000); // Run slightly after startup
+
+  // 5 Minutes Interval: Vendor Shipments, QC, Reorder
+  const run5mSim = async () => {
+    try {
+      const vends = await db.select().from(vendors).limit(10);
+      const allProds = await db.execute(sql`SELECT id FROM products ORDER BY RANDOM() LIMIT 50`);
+      const prodIds = (allProds.rows || []).map(r => r.id as number);
+      const getProdId = () => prodIds.length > 0 ? prodIds[Math.floor(Math.random() * prodIds.length)] : 1;
+      
+      if (vends.length > 0) {
+        const shipments = [];
+        for(let i=0; i<40; i++) {
+          shipments.push({
+            vendorId: vends[Math.floor(Math.random() * vends.length)].id,
+            status: ['Expected', 'Arrived', 'Unloading', 'Completed'][Math.floor(Math.random()*4)],
+            expectedDate: new Date(Date.now() + Math.floor((Math.random() - 0.5) * 86400000 * 10)).toISOString(),
+            batchNumber: `BATCH-${Date.now()}-${i}-${Math.floor(1000 + Math.random() * 9000)}`,
+            totalItems: Math.floor(100 + Math.random() * 900)
+          });
+        }
+        const insertedShipments = await db.insert(incomingShipments).values(shipments).returning({ id: incomingShipments.id });
+        
+        if (insertedShipments.length > 0) {
+           const qcs = [];
+           for(let i=0; i<40; i++) {
+             qcs.push({
+                shipmentId: insertedShipments[i % insertedShipments.length].id,
+                productId: getProdId(),
+                sellableItems: Math.floor(50 + Math.random() * 50),
+                damagedItems: Math.floor(Math.random() * 10),
+                qcDate: new Date(Date.now() - Math.floor(Math.random() * 86400000 * 2)).toISOString()
+             });
+           }
+           await db.insert(qualityChecks).values(qcs);
+        }
+
+        const pos = [];
+        for(let i=0; i<40; i++) {
+           pos.push({
+              vendorId: vends[Math.floor(Math.random() * vends.length)].id,
+              productId: getProdId(),
+              quantity: Math.floor(1 + Math.random() * 500),
+              status: ['Requested', 'Approved', 'Fulfilled'][Math.floor(Math.random()*3)]
+           });
+        }
+        await db.insert(purchaseOrders).values(pos);
+      }
+    } catch(e) { console.error("5m sim error", e); }
+  };
+  setInterval(run5mSim, 5 * 60 * 1000);
+  setTimeout(run5mSim, 2000); // Run slightly after startup
+
+  // 10 Minutes Interval: Fulfillment, Dock, Scanner, Treasury, HR
+  const run10mSim = async () => {
+    try {
+      // Fulfillment (50 orders)
+      const ords = [];
+      const timestampBase = Date.now();
+      for(let i=0; i<50; i++) {
+        ords.push({
+           meeshoOrderId: `ORD-${timestampBase}-${i}-${Math.floor(Math.random()*10000)}`,
+           sku: `SKU-${Date.now()}-${i}-${Math.floor(1000+Math.random()*9000)}`,
+           quantity: Math.floor(1 + Math.random()*5),
+           customerName: `Customer ${Date.now()}-${i}-${Math.floor(Math.random()*100000)}`,
+           shippingAddress: `Auto Address ${Date.now()}-${i}-${Math.floor(Math.random()*1000)}`,
+           status: ['Pending', 'Packed', 'Ready', 'Dispatched'][Math.floor(Math.random()*4)]
+        });
+      }
+      await db.insert(orders).values(ords);
+
+      // Dock Management Simulation
+      const occupiedDoors = await db.select().from(dockDoors).where(eq(dockDoors.status, 'Occupied'));
+      for (const door of occupiedDoors) {
+        if (Math.random() > 0.2) {
+           await db.update(dockDoors).set({ status: 'Available', currentVehicleId: null }).where(eq(dockDoors.id, door.id));
+           if (door.currentVehicleId) {
+              await db.update(vehicleLogs).set({ status: 'Departed', checkOutTime: new Date() }).where(eq(vehicleLogs.id, door.currentVehicleId));
+           }
+        }
+      }
+      
+      const vLogs = [];
+      for(let i=0; i<15; i++) {
+         vLogs.push({
+            vehicleNumber: `DL-1M-${Date.now().toString().slice(-4)}${i}`,
+            carrierName: `Logistics ${Date.now()}-${i}`,
+            type: Math.random() > 0.5 ? 'Inbound' : 'Outbound',
+            driverName: `Driver ${Math.floor(Math.random()*1000)}`,
+            driverContact: `999${Math.floor(1000000 + Math.random() * 9000000)}`,
+            scheduledTime: new Date(),
+            status: 'Expected'
+         });
+      }
+      await db.insert(vehicleLogs).values(vLogs);
+
+      const availableDoors = await db.select().from(dockDoors).where(eq(dockDoors.status, 'Available')).limit(5);
+      const pendingVehicles = await db.select().from(vehicleLogs).where(eq(vehicleLogs.status, 'Expected')).limit(5);
+      for (let i = 0; i < Math.min(availableDoors.length, pendingVehicles.length); i++) {
+         await db.update(dockDoors).set({ status: 'Occupied', currentVehicleId: pendingVehicles[i].id }).where(eq(dockDoors.id, availableDoors[i].id));
+         await db.update(vehicleLogs).set({ status: 'Docked', checkInTime: new Date(), dockDoorId: availableDoors[i].id }).where(eq(vehicleLogs.id, pendingVehicles[i].id));
+      }
+
+      // Barcode & RFID (60 scans)
+      const scns = await db.select().from(scanners).limit(10);
+      if (scns.length > 0) {
+         const scansToInsert = [];
+         for(let i=0; i<60; i++) {
+            scansToInsert.push({
+               itemSku: `SKU-${Date.now()}-${i}-${Math.floor(1000+Math.random()*9000)}`,
+               scannerId: scns[Math.floor(Math.random()*scns.length)].id,
+               scanType: ['Pick', 'Pack', 'Receive', 'Count'][Math.floor(Math.random()*4)],
+               status: 'Success',
+               timestamp: new Date(Date.now() - Math.floor(Math.random() * 86400000))
+            });
+         }
+         await db.insert(scanLogs).values(scansToInsert);
+      }
+
+      // Bank Treasury (100 transactions)
+      const accs = await db.select().from(treasuryAccounts).limit(10);
+      if (accs.length > 0) {
+         const trans = [];
+         for(let i=0; i<100; i++) {
+            trans.push({
+               accountId: accs[Math.floor(Math.random() * accs.length)].id,
+               type: Math.random() > 0.5 ? 'Credit' : 'Debit',
+               amount: Math.floor(100 + Math.random() * 5000),
+               category: ['Material Purchase', 'Operational Expense', 'Payroll', 'Revenue'][Math.floor(Math.random()*4)],
+               description: `Batch simulation #T${Date.now()}-${i}-${Math.floor(Math.random()*100000)}`
+            });
+         }
+         await db.insert(treasuryTransactions).values(trans);
+      }
+
+      // HR Compliance (10 certs, 10 grievances)
+      const emps = await db.select().from(employees).limit(10);
+      if (emps.length > 0) {
+         const certs = [];
+         const grvs = [];
+         for(let i=0; i<10; i++) {
+            const empId = emps[Math.floor(Math.random() * emps.length)].id;
+            certs.push({
+               employeeId: empId,
+               name: `Safety Training L${Math.floor(1 + Math.random()*5)}-${Date.now()}-${i}`,
+               issueDate: new Date(Date.now() - Math.floor(Math.random() * 86400000 * 100)).toISOString(),
+               expiryDate: new Date(Date.now() + Math.floor(Math.random() * 86400000 * 365)).toISOString()
+            });
+            grvs.push({
+               employeeId: empId,
+               subject: `Workplace query #${Date.now()}-${i}-${Math.floor(Math.random()*10000)}`,
+               description: 'Automated compliance tracking log',
+               status: ['Pending', 'In Progress', 'Resolved'][Math.floor(Math.random()*3)]
+            });
+         }
+         await db.insert(certifications).values(certs);
+         await db.insert(grievances).values(grvs);
+      }
+    } catch(e) { console.error("10m sim error", e); }
+  };
+  setInterval(run10mSim, 10 * 60 * 1000);
+  setTimeout(run10mSim, 3000); // Run slightly after startup
+
+  // 60 Minutes Interval: Leave Requests
+  const run60mSim = async () => {
+    try {
+      const emps = await db.select().from(employees).limit(10);
+      if (emps.length > 0) {
+        const leaves = [];
+        for(let i=0; i<10; i++) {
+           const startOffset = Math.floor(Math.random() * 86400000 * 30);
+           const duration = Math.floor(1 + Math.random() * 5) * 86400000;
+           leaves.push({
+             employeeId: emps[Math.floor(Math.random() * emps.length)].id,
+             startDate: new Date(Date.now() + startOffset).toISOString(),
+             endDate: new Date(Date.now() + startOffset + duration).toISOString(),
+             reason: `Automated leave request ${Date.now()}-${i}-${Math.floor(Math.random()*10000)}`,
+             status: ['Pending', 'Approved', 'Rejected'][Math.floor(Math.random()*3)]
+           });
+        }
+        await db.insert(leaveRequests).values(leaves);
+      }
+    } catch(e) { console.error("60m sim error", e); }
+  };
+  setInterval(run60mSim, 60 * 60 * 1000);
+  setTimeout(run60mSim, 4000); // Run slightly after startup
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
