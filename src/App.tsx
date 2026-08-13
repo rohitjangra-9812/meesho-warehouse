@@ -19,8 +19,9 @@ import { HubsScreen } from './components/HubsScreen.tsx';
 import { FulfillmentScreen } from './components/FulfillmentScreen.tsx';
 import { TreasuryScreen } from './components/TreasuryScreen.tsx';
 import { DockManagementScreen } from './components/DockManagementScreen.tsx';
+import { LossRecoveryScreen } from './components/LossRecoveryScreen.tsx';
 import { ScannerHubScreen } from './components/ScannerHubScreen.tsx';
-import { Boxes, LogOut, Users, Briefcase, FileText, IndianRupee, Clock, Activity, Truck, Shield, MapPin, PackageOpen, Landmark, Navigation, ScanBarcode, Cloud, RefreshCw, CheckCircle2, Database } from 'lucide-react';
+import { Boxes, LogOut, Users, Briefcase, FileText, IndianRupee, Clock, Activity, Truck, Shield, MapPin, PackageOpen, Landmark, Navigation, ScanBarcode, Cloud, RefreshCw, CheckCircle2, Database, AlertTriangle, X } from 'lucide-react';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -104,6 +105,58 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { logout } = useContext(AuthContext);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(new Date());
+  const [showTrafficAlert, setShowTrafficAlert] = useState(false);
+  const [alertDismissed, setAlertDismissed] = useState(false);
+
+  useEffect(() => {
+    // Detect high traffic alert based on the timestamp constraint (2 hours)
+    const alertCreatedAt = new Date('2026-08-10T23:54:42-07:00').getTime();
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    const now = Date.now();
+    
+    if (now < alertCreatedAt + twoHoursMs && !alertDismissed) {
+      setShowTrafficAlert(true);
+      
+      try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+          
+          osc.type = 'square';
+          // Create a loud two-tone siren effect for 20 seconds
+          const duration = 20.0;
+          for (let i = 0; i < duration; i += 0.8) {
+            osc.frequency.setValueAtTime(880, ctx.currentTime + i);
+            if (i + 0.4 < duration) {
+              osc.frequency.setValueAtTime(1100, ctx.currentTime + i + 0.4);
+            }
+          }
+          
+          gainNode.gain.setValueAtTime(0, ctx.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.1); // High volume
+          gainNode.gain.setValueAtTime(0.5, ctx.currentTime + duration - 0.1);
+          gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
+          
+          osc.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          
+          osc.start();
+          osc.stop(ctx.currentTime + duration);
+        }
+      } catch (err) {
+        console.error("Audio playback failed", err);
+      }
+      
+      // Auto-hide the urgent banner after 10 minutes (600000 ms)
+      const timer = setTimeout(() => {
+        setShowTrafficAlert(false);
+      }, 600000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [alertDismissed]);
 
   useEffect(() => {
     const syncData = async () => {
@@ -144,6 +197,7 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
     { path: '/notices', label: 'Notices', icon: FileText },
     { path: '/salary', label: 'Salary', icon: IndianRupee },
     { path: '/attendance', label: 'Attendance', icon: Clock },
+    { path: '/loss-recovery', label: 'Loss & Recovery', icon: AlertTriangle },
   ];
 
   const meeshoWatermarkSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><text x="200" y="100" font-family="Arial" font-size="40" font-weight="bold" fill="rgba(0,0,0,0.03)" text-anchor="middle" transform="rotate(-30, 200, 100)">MEESHO WAREHOUSE</text></svg>`;
@@ -236,6 +290,25 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
              </div>
           </div>
         </header>
+        {showTrafficAlert && (
+          <div className="bg-red-600 text-white px-4 md:px-6 py-3 flex items-start sm:items-center justify-between shadow-md z-10 animate-in slide-in-from-top-4 fade-in duration-300">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-lg shrink-0">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <p className="font-bold text-sm tracking-wide">HIGH TRAFFIC DETECTED</p>
+                <p className="text-xs text-red-100 mt-0.5">High traffic patterns detected at warehouse packing areas and dock gates. Please review orders on the portal.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => { setShowTrafficAlert(false); setAlertDismissed(true); }} 
+              className="text-white/80 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-colors ml-4 shrink-0"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
         <div className="flex-1 overflow-auto p-6 md:p-8 max-w-7xl mx-auto w-full h-full">
           {children}
         </div>
@@ -273,6 +346,7 @@ export default function App() {
           <Route path="/notices" element={<ProtectedRoute><DashboardLayout><NoticesScreen /></DashboardLayout></ProtectedRoute>} />
           <Route path="/salary" element={<ProtectedRoute><DashboardLayout><SalaryScreen /></DashboardLayout></ProtectedRoute>} />
           <Route path="/attendance" element={<ProtectedRoute><DashboardLayout><AttendanceScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/loss-recovery" element={<ProtectedRoute><DashboardLayout><LossRecoveryScreen /></DashboardLayout></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

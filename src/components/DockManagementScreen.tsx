@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchApi } from '../lib/api.ts';
-import { Truck, Clock, CalendarCheck, CalendarRange, Navigation, Settings, Plus, X, AlertTriangle } from 'lucide-react';
+import { Truck, Clock, CalendarCheck, CalendarRange, Navigation, Settings, Plus, X, AlertTriangle, Camera, Activity, TrendingUp } from 'lucide-react';
 
 interface DockDoor {
   id: number;
@@ -24,10 +24,28 @@ interface VehicleLog {
   driverContact: string;
 }
 
+const getStateName = (plateNumber: string) => {
+  if (!plateNumber || plateNumber.length < 2) return 'Unknown State';
+  const code = plateNumber.substring(0, 2).toUpperCase();
+  const stateMap: Record<string, string> = {
+    'AP': 'Andhra Pradesh', 'AR': 'Arunachal Pradesh', 'AS': 'Assam', 'BR': 'Bihar', 
+    'CG': 'Chhattisgarh', 'GA': 'Goa', 'GJ': 'Gujarat', 'HR': 'Haryana', 'HP': 'Himachal Pradesh', 
+    'JH': 'Jharkhand', 'KA': 'Karnataka', 'KL': 'Kerala', 'MP': 'Madhya Pradesh', 'MH': 'Maharashtra', 
+    'MN': 'Manipur', 'ML': 'Meghalaya', 'MZ': 'Mizoram', 'NL': 'Nagaland', 'OD': 'Odisha', 
+    'PB': 'Punjab', 'RJ': 'Rajasthan', 'SK': 'Sikkim', 'TN': 'Tamil Nadu', 'TG': 'Telangana', 
+    'TR': 'Tripura', 'UP': 'Uttar Pradesh', 'UK': 'Uttarakhand', 'WB': 'West Bengal', 
+    'AN': 'Andaman and Nicobar', 'CH': 'Chandigarh', 'DN': 'Dadra & Nagar', 
+    'DD': 'Daman & Diu', 'DL': 'Delhi', 'JK': 'Jammu & Kashmir', 'LA': 'Ladakh', 
+    'LD': 'Lakshadweep', 'PY': 'Puducherry'
+  };
+  return stateMap[code] || 'Unknown State';
+};
+
 export function DockManagementScreen() {
   const [doors, setDoors] = useState<DockDoor[]>([]);
   const [vehicles, setVehicles] = useState<VehicleLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [optimalPath, setOptimalPath] = useState<{ optimalPath: string, congestionLevel: number } | null>(null);
 
   // New Booking State
   const [showBooking, setShowBooking] = useState(false);
@@ -36,6 +54,15 @@ export function DockManagementScreen() {
   });
   
   const [alertDismissed, setAlertDismissed] = useState(false);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'history'>('dashboard');
+  
+  const alertHistory = [
+    { id: 1, timestamp: '2026-08-10T14:30:00Z', location: 'Gate A (Inbound)', severity: 'High', description: 'Surge of 15 expected vehicles within 30 minutes.' },
+    { id: 2, timestamp: '2026-08-09T09:15:00Z', location: 'Dock 08-10', severity: 'Medium', description: 'Occupancy exceeded 80% for over 2 hours.' },
+    { id: 3, timestamp: '2026-08-08T18:45:00Z', location: 'Warehouse Packing & Docks Gate', severity: 'Critical', description: 'High trafficking occurred in the warehouse packing and the docks gate.' },
+    { id: 4, timestamp: '2026-08-07T11:20:00Z', location: 'Yard Staging Area', severity: 'High', description: 'Yard capacity reached 95%. Traffic diverted.' },
+  ];
+
 
   const totalDoors = doors.length;
   const occupiedDoors = doors.filter(d => d.status === 'Occupied').length;
@@ -48,12 +75,24 @@ export function DockManagementScreen() {
     }
   }, [occupancyRate, alertDismissed]);
 
+    const currentInboundExpected = vehicles.filter(v => v.type === 'Inbound' && (v.status === 'Expected' || v.status === 'Arrived')).length;
+  // Mock 7-day rolling average
+  const rollingAvgInbound = 5; 
+  const surgeMultiplier = currentInboundExpected / (rollingAvgInbound || 1);
+  const isSurge = surgeMultiplier >= 1.5;
+
   const loadData = async () => {
     try {
       setLoading(true);
       const res = await fetchApi('/docks');
       setDoors(res.doors);
       setVehicles(res.vehicles);
+      try {
+        const pathRes = await fetchApi('/docks/paths/optimal');
+        setOptimalPath(pathRes);
+      } catch(e) {
+        console.error(e);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -102,6 +141,7 @@ export function DockManagementScreen() {
   };
 
   return (
+
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <div className="flex items-center gap-4">
@@ -128,7 +168,24 @@ export function DockManagementScreen() {
         </div>
       </div>
 
-      {showBooking && (
+            <div className="flex gap-6 border-b border-gray-200">
+        <button 
+          onClick={() => setActiveTab('dashboard')} 
+          className={`pb-4 px-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          Live Dashboard
+        </button>
+        <button 
+          onClick={() => setActiveTab('history')} 
+          className={`pb-4 px-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          Alert History
+        </button>
+      </div>
+
+      {activeTab === 'dashboard' ? (
+        <>
+{showBooking && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
             <div className="flex justify-between items-center p-4 border-b">
@@ -212,7 +269,10 @@ export function DockManagementScreen() {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex flex-col">
                           <span className="text-sm font-medium text-gray-900">{v.vehicleNumber}</span>
-                          <span className="text-xs text-gray-500">{v.carrierName}</span>
+                          <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200 mt-0.5 w-max">
+                            {getStateName(v.vehicleNumber)}
+                          </span>
+                          <span className="text-xs text-gray-500 mt-1">{v.carrierName}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -246,6 +306,71 @@ export function DockManagementScreen() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
+          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl shadow-sm border border-indigo-100 p-6">
+            <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
+              <Camera className="w-5 h-5 text-indigo-600" /> AI Yard Camera Analysis
+            </h3>
+            <p className="text-xs text-indigo-700 mb-4">Real-time congestion and turnaround analysis.</p>
+            {doors.filter(d => d.status === 'Available').length > 0 ? (
+              <div className="bg-white p-4 rounded-lg border border-indigo-50 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-gray-500 uppercase">Suggested Next Assignment</span>
+                  <p className="font-bold text-xl text-gray-900 mt-1">{doors.filter(d => d.status === 'Available')[0]?.doorNumber}</p>
+                </div>
+                <div className="text-right">
+                   <div className="flex items-center gap-1 text-green-600 text-xs font-medium justify-end mb-1">
+                      <Activity className="w-3 h-3" /> Least Congested Path
+                   </div>
+                   <p className="text-xs text-gray-600 font-bold">{optimalPath ? optimalPath.optimalPath : "Calculating..."}</p>
+                   {optimalPath && <p className="text-[10px] text-gray-400">Congestion: {optimalPath.congestionLevel.toFixed(0)}%</p>}
+                </div>
+              </div>
+            ) : (
+               <div className="bg-orange-50 p-4 rounded-lg border border-orange-100 flex items-center gap-3">
+                 <AlertTriangle className="text-orange-500 w-5 h-5" />
+                 <p className="text-sm font-medium text-orange-800">All gates currently occupied. High congestion.</p>
+               </div>
+            )}
+          </div>
+          
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-gray-500" /> Traffic Surge Prediction
+            </h3>
+            <div className="flex items-center justify-between mb-2">
+               <span className="text-sm font-medium text-gray-600">Current Inflow Rate</span>
+               <span className="font-bold text-gray-900">{currentInboundExpected} vehicles</span>
+            </div>
+            <div className="flex items-center justify-between mb-4">
+               <span className="text-sm font-medium text-gray-600">7-Day Rolling Avg</span>
+               <span className="font-bold text-gray-900">{rollingAvgInbound} vehicles</span>
+            </div>
+            
+            <div className={`p-4 rounded-lg border ${isSurge ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+               {isSurge ? (
+                 <div className="flex items-start gap-3">
+                   <AlertTriangle className="text-red-600 w-5 h-5 shrink-0 mt-0.5" />
+                   <div>
+                     <p className="font-bold text-red-900 text-sm">Surge Warning</p>
+                     <p className="text-xs text-red-700 mt-1">
+                       Inflow is {(surgeMultiplier * 100).toFixed(0)}% of the 7-day average. Prepare for potential gate congestion in the next hour.
+                     </p>
+                   </div>
+                 </div>
+               ) : (
+                 <div className="flex items-start gap-3">
+                   <Activity className="text-green-600 w-5 h-5 shrink-0 mt-0.5" />
+                   <div>
+                     <p className="font-bold text-green-900 text-sm">Traffic Normal</p>
+                     <p className="text-xs text-green-700 mt-1">
+                       Current inflow rate is stable and within expected historical bounds.
+                     </p>
+                   </div>
+                 </div>
+               )}
+            </div>
+          </div>
+          
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><Navigation className="w-5 h-5 text-gray-500" /> Dock Doors</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -290,7 +415,10 @@ export function DockManagementScreen() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col">
                         <span className="text-sm font-bold text-gray-900">{v.vehicleNumber}</span>
-                        <span className="text-xs text-gray-500">{v.carrierName}</span>
+                        <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200 mt-0.5 w-max">
+                          {getStateName(v.vehicleNumber)}
+                        </span>
+                        <span className="text-xs text-gray-500 mt-1">{v.carrierName}</span>
                         <span className={`text-xs mt-1 w-max px-2 py-0.5 rounded-full font-medium ${v.type === 'Inbound' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
                           {v.type}
                         </span>
@@ -352,6 +480,49 @@ export function DockManagementScreen() {
           </div>
         </div>
       </div>
+        </>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-6 border-b border-gray-200 bg-gray-50">
+            <h3 className="font-bold text-gray-900 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-gray-500" /> Historical Traffic Alerts</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-white">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Location</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Severity</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {alertHistory.map(alert => (
+                  <tr key={alert.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                      {new Date(alert.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {alert.location}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        alert.severity === 'Critical' ? 'bg-red-100 text-red-800' : 
+                        alert.severity === 'High' ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {alert.severity}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {alert.description}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

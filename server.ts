@@ -23,12 +23,12 @@ async function startServer() {
     const existingAccounts = await db.select().from(treasuryAccounts).limit(1);
     if (existingAccounts.length === 0) {
        await db.insert(treasuryAccounts).values([
-         { accountName: 'SBI Primary Escrow', accountNumber: '3029192991', ifscCode: 'SBIN0004321', balance: 100000000, type: 'Operating' },
-         { accountName: 'HDFC Vendor Payout', accountNumber: '5010029399', ifscCode: 'HDFC0001234', balance: 100000000, type: 'Vendor' },
+         { accountName: 'SBI Primary Escrow', accountNumber: '3029192991', ifscCode: 'SBIN0004321', balance: 50000000, type: 'Operating' },
+         { accountName: 'HDFC Vendor Payout', accountNumber: '5010029399', ifscCode: 'HDFC0001234', balance: 50000000, type: 'Vendor' },
        ]);
        console.log("Seeded treasury accounts");
     } else {
-       await db.execute(sql`UPDATE treasury_accounts SET balance = 100000000`);
+       await db.execute(sql`UPDATE treasury_accounts SET balance = 50000000`);
     }
   } catch(e) {
     console.error("Failed to auto-seed", e);
@@ -98,6 +98,28 @@ async function startServer() {
   // POST /api/auth/sync: Kept for compatibility but returns dummy
   app.post("/api/auth/sync", requireAuth, async (req: AuthRequest, res: Response) => {
     res.json({ status: "ok" });
+  });
+
+  // GET /api/cctv/:id: Mock CCTV feed
+  app.get("/api/cctv/:id", (req: any, res: any) => {
+    const cameraId = req.params.id;
+    
+    // Generate a dynamic SVG image card for the requested camera feed
+    const svgBuffer = Buffer.from(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+        <rect width="100%" height="100%" fill="#111827"/>
+        <rect x="20" y="20" width="600" height="320" rx="8" fill="#1f2937" stroke="#374151" stroke-width="2"/>
+        <text x="40" y="60" fill="#9ca3af" font-family="monospace" font-size="16">CCTV FEED - CAMERA #${cameraId}</text>
+        <text x="40" y="110" fill="#ffffff" font-family="sans-serif" font-weight="bold" font-size="24">LIVE SECURITY MONITORING</text>
+        <text x="40" y="150" fill="#10b981" font-family="monospace" font-size="14">STATUS: CONNECTED (SECURE PORT)</text>
+        <text x="40" y="190" fill="#9ca3af" font-family="sans-serif" font-size="14">Timestamp: ${new Date().toLocaleTimeString()}</text>
+        <circle cx="580" cy="50" r="8" fill="#ef4444"/>
+      </svg>
+    `);
+  
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.status(200).send(svgBuffer);
   });
 
   // GET /api/inventory: Fetch all inventory
@@ -346,6 +368,76 @@ async function startServer() {
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Failed to seed management directory" });
+    }
+  });
+
+  // GET /api/management/dashboard: Fetch dashboard stats
+  app.get("/api/management/dashboard", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const treasury = await db.select().from(treasuryAccounts);
+      const totalBalance = treasury.reduce((acc, t) => acc + (t.balance || 0), 0);
+
+      const doors = await db.select().from(dockDoors);
+      
+      const today = new Date().toISOString().split('T')[0];
+      const attendance = await db.select().from(attendanceLogs).where(eq(attendanceLogs.date, today));
+      const presentCount = attendance.filter(a => a.status === 'Present').length;
+      
+      const activeEmployees = await db.select({ id: employees.id }).from(employees).where(eq(employees.status, 'Active'));
+      const totalActive = activeEmployees.length;
+
+      const recentLogs = await db.select({
+        id: auditLogs.id,
+        action: auditLogs.action,
+        timestamp: auditLogs.timestamp,
+        userName: users.name
+      }).from(auditLogs)
+        .leftJoin(users, eq(auditLogs.userId, users.id))
+        .orderBy(desc(auditLogs.timestamp))
+        .limit(10);
+
+      // Generate some dynamic alerts based on current state
+      const alerts = [];
+      const offlineScanners = await db.select().from(scanners).where(eq(scanners.status, 'Error'));
+      if (offlineScanners.length > 0) {
+        alerts.push({ id: 1, type: 'error', message: `${offlineScanners.length} Scanners are currently offline or in error state.` });
+      }
+      
+      const pendingVehicles = await db.select().from(vehicleLogs).where(eq(vehicleLogs.status, 'Expected'));
+      if (pendingVehicles.length > 5) {
+        alerts.push({ id: 2, type: 'warning', message: `High traffic at docks: ${pendingVehicles.length} vehicles waiting.` });
+      }
+
+      // Custom time-bound alert requested by user
+      const alertCreatedAt = new Date('2026-08-10T23:54:42-07:00').getTime(); // Using approx current time of request
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+      if (Date.now() < alertCreatedAt + twoHoursMs) {
+        alerts.push({ 
+          id: 4, 
+          type: 'warning', 
+          message: 'High trafficking occurred in the warehouse packing and the docks gate, order on the portal.' 
+        });
+      }
+
+      alerts.push({ id: 3, type: 'info', message: 'OpEx limits are within acceptable thresholds for Q3.' });
+
+      res.json({
+        financial: {
+          totalBalance,
+          dailyRevenue: Math.floor(Math.random() * 500000) + 100000,
+          operationalEx: Math.floor(Math.random() * 200000) + 50000
+        },
+        dockDoors: doors,
+        workforce: {
+          present: presentCount,
+          total: totalActive
+        },
+        alerts,
+        recentLogs
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Failed to fetch management dashboard" });
     }
   });
 
@@ -1027,13 +1119,13 @@ async function startServer() {
 
       const newTx = await db.insert(treasuryTransactions).values({
         accountId: account[0].id,
-        type: 'Debit',
-        amount: Math.floor(Math.random() * 50000) + 10000,
-        category: 'Material Purchase',
-        description: `Automated payment for supplier PO-${Math.floor(Math.random() * 1000)}`,
+        type: 'Credit',
+        amount: 250000,
+        category: 'Salary Credited Detection',
+        description: 'CR payment received from Rohit Jangra. Source: Direct Bank Transfer (NEFT)',
       }).returning();
 
-      const newBalance = account[0].balance - newTx[0].amount;
+      const newBalance = account[0].balance + newTx[0].amount;
       await db.update(treasuryAccounts)
         .set({ balance: newBalance, updatedAt: new Date() })
         .where(eq(treasuryAccounts.id, account[0].id));
@@ -1087,6 +1179,23 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to seed docks" });
+    }
+  });
+
+
+  app.get("/api/docks/paths/optimal", requireAuth, async (req, res) => {
+    try {
+      // Simulate real-time sensor API data
+      const paths = [
+        { name: "North Gate Route", congestion: Math.random() * 100 },
+        { name: "South Gate Route", congestion: Math.random() * 100 },
+        { name: "East Gate Route", congestion: Math.random() * 100 },
+        { name: "West Gate Route", congestion: Math.random() * 100 }
+      ];
+      const leastCongested = paths.sort((a, b) => a.congestion - b.congestion)[0];
+      res.json({ optimalPath: leastCongested.name, congestionLevel: leastCongested.congestion });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to calculate optimal path" });
     }
   });
 
@@ -1367,10 +1476,13 @@ async function startServer() {
         }
       }
       
+      const stateCodes = ['AP', 'AR', 'AS', 'BR', 'CG', 'GA', 'GJ', 'HR', 'HP', 'JH', 'KA', 'KL', 'MP', 'MH', 'MN', 'ML', 'MZ', 'NL', 'OD', 'PB', 'RJ', 'SK', 'TN', 'TG', 'TR', 'UP', 'UK', 'WB', 'AN', 'CH', 'DN', 'DD', 'DL', 'JK', 'LA', 'LD', 'PY'];
       const vLogs = [];
       for(let i=0; i<15; i++) {
+         const randomState = stateCodes[Math.floor(Math.random() * stateCodes.length)];
+         const randomRegionCode = Math.floor(1 + Math.random() * 99).toString().padStart(2, '0');
          vLogs.push({
-            vehicleNumber: `DL-1M-${Date.now().toString().slice(-4)}${i}`,
+            vehicleNumber: `${randomState}-${randomRegionCode}-M-${Date.now().toString().slice(-4)}${i}`,
             carrierName: `Logistics ${Date.now()}-${i}`,
             type: Math.random() > 0.5 ? 'Inbound' : 'Outbound',
             driverName: `Driver ${Math.floor(Math.random()*1000)}`,
@@ -1407,6 +1519,11 @@ async function startServer() {
       // Bank Treasury (100 transactions)
       const accs = await db.select().from(treasuryAccounts).limit(10);
       if (accs.length > 0) {
+         for (const acc of accs) {
+            const newBalance = Math.floor(Math.random() * 49000000) + 1000000;
+            await db.update(treasuryAccounts).set({ balance: newBalance }).where(eq(treasuryAccounts.id, acc.id));
+         }
+
          const trans = [];
          for(let i=0; i<100; i++) {
             trans.push({

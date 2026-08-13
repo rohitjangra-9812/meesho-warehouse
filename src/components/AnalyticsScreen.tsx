@@ -38,6 +38,16 @@ export function AnalyticsScreen() {
   const [productivity, setProductivity] = useState<Productivity[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [kpis, setKpis] = useState<KPIMetrics | null>(null);
+  const [hasHighTrafficAlert, setHasHighTrafficAlert] = useState(false);
+
+  useEffect(() => {
+    const alertCreatedAt = new Date('2026-08-10T21:26:54-07:00').getTime();
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    
+    if (Date.now() < alertCreatedAt + twoHoursMs) {
+      setHasHighTrafficAlert(true);
+    }
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -147,6 +157,44 @@ export function AnalyticsScreen() {
             {stockData.length > 0 ? stockData.reduce((prev, current) => (prev.stock > current.stock) ? prev : current).district : 'N/A'}
           </p>
           <p className="text-sm text-gray-500 mt-1">Based on current stock holding</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="font-bold text-gray-900">Live Warehouse Floor Plan Heatmap</h3>
+          {hasHighTrafficAlert && (
+             <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full animate-pulse">
+               HIGH TRAFFIC DETECTED
+             </span>
+          )}
+        </div>
+        <div className="relative w-full aspect-[2/1] bg-gray-50 rounded-lg overflow-hidden border border-gray-100">
+          <svg viewBox="0 0 800 400" className="w-full h-full">
+            {/* Outline */}
+            <rect x="20" y="20" width="760" height="360" fill="transparent" stroke="#e5e7eb" strokeWidth="4" rx="8" />
+            
+            {/* Zones */}
+            {/* Storage A */}
+            <rect x="40" y="40" width="200" height="150" fill="#f3f4f6" stroke="#d1d5db" strokeWidth="2" rx="4" />
+            <text x="140" y="115" textAnchor="middle" fill="#6b7280" fontSize="14" fontWeight="bold">Storage Zone A</text>
+            
+            {/* Storage B */}
+            <rect x="260" y="40" width="200" height="150" fill="#f3f4f6" stroke="#d1d5db" strokeWidth="2" rx="4" />
+            <text x="360" y="115" textAnchor="middle" fill="#6b7280" fontSize="14" fontWeight="bold">Storage Zone B</text>
+
+            {/* Quality Check */}
+            <rect x="480" y="40" width="280" height="80" fill="#f3f4f6" stroke="#d1d5db" strokeWidth="2" rx="4" />
+            <text x="620" y="85" textAnchor="middle" fill="#6b7280" fontSize="14" fontWeight="bold">Quality Control</text>
+
+            {/* Packing Area - Highlight if alert */}
+            <rect x="40" y="210" width="420" height="150" fill={hasHighTrafficAlert ? "#fee2e2" : "#f3f4f6"} stroke={hasHighTrafficAlert ? "#ef4444" : "#d1d5db"} strokeWidth="2" rx="4" className={hasHighTrafficAlert ? "animate-pulse" : ""} style={{ animationDuration: '3s' }} />
+            <text x="250" y="285" textAnchor="middle" fill={hasHighTrafficAlert ? "#b91c1c" : "#6b7280"} fontSize="14" fontWeight="bold">Packing &amp; Sorting</text>
+            
+            {/* Docks Gate - Highlight if alert */}
+            <rect x="480" y="140" width="280" height="220" fill={hasHighTrafficAlert ? "#fee2e2" : "#f3f4f6"} stroke={hasHighTrafficAlert ? "#ef4444" : "#d1d5db"} strokeWidth="2" rx="4" className={hasHighTrafficAlert ? "animate-pulse" : ""} style={{ animationDuration: '2s' }} />
+            <text x="620" y="250" textAnchor="middle" fill={hasHighTrafficAlert ? "#b91c1c" : "#6b7280"} fontSize="14" fontWeight="bold">Docks Gate</text>
+          </svg>
         </div>
       </div>
 
