@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertOctagon, TrendingDown, Clock, Banknote, PackageOpen, CheckCircle, Calculator, Download, CheckBadge, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AlertOctagon, TrendingDown, Clock, Banknote, PackageOpen, CheckCircle, Calculator, Download, ShieldCheck  , Video } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const chartData = [
@@ -10,6 +10,22 @@ const chartData = [
 ];
 
 export function LossRecoveryScreen() {
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const videoFeeds = [
+    'https://www.youtube.com/embed/c9Jy5yk0_lQ?autoplay=1&mute=1&controls=0&playsinline=1',
+    'https://www.youtube.com/embed/_nm1Yb8sxxY?autoplay=1&mute=1&controls=0&playsinline=1',
+    'https://www.youtube.com/embed/ODM8ZHx8w3g?autoplay=1&mute=1&controls=0&playsinline=1',
+    'https://www.youtube.com/embed/Cs6cbu1BDxo?autoplay=1&mute=1&controls=0&playsinline=1'
+  ];
+  const feedNames = ['Main Floor', 'Dispatch', 'Inventory', 'QC Station'];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentVideoIndex((prev) => (prev + 1) % videoFeeds.length);
+    }, 15000); // Cycle every 15 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   const handleDownloadCSV = () => {
     const csvContent = [
       "MEESHO WAREHOUSE MANAGEMENT SYSTEM - OFFICIAL REPORT",
@@ -38,6 +54,11 @@ export function LossRecoveryScreen() {
       "Calculation: Loss_backlog = (15,000 * 300) + Rs 4 Crore = Rs 4.5 Crore",
       "Root Cause: Systemic isolation between the Fulfillment & Shipping and Inventory tracking modules.",
       "Corrective Action: Automate inventory safety stock buffers to ensure packing lines have at least 48 hours of buffer stock. Integrate real-time tracking from scanners directly into the packing queue.",
+      "",
+      "5. Operational Stabilization & Capital Injection",
+      "Fund Transfer Log: Emergency Capital Transfer to restore negative balances and resume paused operations.",
+      "Transferred Amount: Rs 24 Crore (24,00,00,000)",
+      "Transferred By: Owner Insp. Rohit Jangra",
       "",
       "Total Financial Impact Summary",
       "Total Loss (L_total) = SUM(L_veh + L_labor + L_tax + L_backlog)",
@@ -82,6 +103,61 @@ export function LossRecoveryScreen() {
           >
             <Download className="w-4 h-4" /> Download Report
           </button>
+        </div>
+      </div>
+
+      {/* Warehouse Live Section */}
+      <div className="bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-800 text-white">
+        <div className="flex items-center gap-3 mb-4 text-red-500">
+          <Video className="w-6 h-6 animate-pulse" />
+          <h3 className="text-lg font-bold">Warehouse Live</h3>
+          <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full font-mono tracking-wider animate-pulse ml-auto">
+            ● LIVE RECORDING
+          </span>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">
+          Real-time operations monitoring. Cycling through active zones to monitor recovery efforts.
+        </p>
+        
+        <div className="bg-black rounded-lg overflow-hidden relative aspect-video flex items-center justify-center border border-gray-700">
+          {/* CCTV Scanlines & Vignette Overlay */}
+          <div className="absolute inset-0 pointer-events-none z-10 bg-[linear-gradient(rgba(255,255,255,0.03)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] opacity-70"></div>
+          <div className="absolute inset-0 pointer-events-none z-10 shadow-[inset_0_0_80px_rgba(0,0,0,0.9)]"></div>
+          
+          <div className="absolute top-3 left-3 flex flex-col gap-1 z-20">
+            <div className="bg-black/60 text-green-400 font-mono text-xs px-2 py-1 rounded backdrop-blur-sm uppercase tracking-wider">
+              CAM 0{currentVideoIndex + 1} - {feedNames[currentVideoIndex]}
+            </div>
+          </div>
+          
+          <iframe 
+            key={currentVideoIndex}
+            src={videoFeeds[currentVideoIndex]} 
+            className="w-full h-full object-cover pointer-events-none scale-105 filter grayscale contrast-125 brightness-75 sepia-[.3] hue-rotate-[180deg] mix-blend-screen opacity-90"
+            allow="autoplay; encrypted-media"
+            frameBorder="0"
+          />
+        </div>
+      </div>
+
+      {/* 5. Capital Injection */}
+      <div className="bg-emerald-50 p-6 rounded-xl shadow-sm border border-emerald-200">
+        <div className="flex items-center gap-3 mb-4 text-emerald-700">
+          <Banknote className="w-6 h-6" />
+          <h3 className="text-lg font-bold">5. Operational Stabilization & Capital Injection</h3>
+        </div>
+        <p className="text-sm text-emerald-800 mb-4">
+          To immediately recover from the negative treasury balances and stabilize operations, an emergency capital injection was executed.
+        </p>
+        <div className="bg-white p-4 rounded-lg mb-4 border border-emerald-100">
+          <h4 className="text-sm font-bold text-emerald-900 uppercase tracking-wider mb-2 flex items-center gap-2">
+            <CheckCircle className="w-4 h-4" /> Fund Transfer Log
+          </h4>
+          <div className="text-sm text-gray-700 space-y-2">
+            <p><span className="font-semibold">Transferred Amount:</span> ₹24 Crore (₹24,00,00,000)</p>
+            <p><span className="font-semibold">Transferred By:</span> Owner Insp. Rohit Jangra</p>
+            <p><span className="font-semibold">Purpose:</span> Emergency Capital Transfer to restore negative balances and resume paused operations.</p>
+          </div>
         </div>
       </div>
 

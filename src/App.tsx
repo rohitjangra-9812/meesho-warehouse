@@ -165,7 +165,7 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
         await fetchApi('/auth/sync', { method: 'POST' });
         setLastSynced(new Date());
       } catch (e) {
-        console.error("Sync failed", e);
+        console.warn("Sync failed - server might be restarting or unreachable", e);
       } finally {
         setIsSyncing(false);
       }

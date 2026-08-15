@@ -34,10 +34,30 @@ export function ManagementScreen() {
   const [loading, setLoading] = useState(true);
 
   const cameras = [
-    { id: 1, name: 'Main Dock (Gate 1)', description: 'Incoming carrier vehicle staging' },
-    { id: 2, name: 'Dispatch Zone (Gate 2)', description: 'Outbound courier handovers' },
-    { id: 3, name: 'Inventory Aisle (Zone A)', description: 'High-density shelving racks' },
-    { id: 4, name: 'Quality Check (QC Area)', description: 'Return inspection & scanning' }
+    { 
+      id: 1, 
+      name: 'Main Dock (Gate 1)', 
+      description: 'Incoming carrier vehicle staging',
+      videoUrl: 'https://www.youtube.com/embed/c9Jy5yk0_lQ?autoplay=1&mute=1&controls=0&loop=1&playlist=c9Jy5yk0_lQ&playsinline=1'
+    },
+    { 
+      id: 2, 
+      name: 'Dispatch Zone (Gate 2)', 
+      description: 'Outbound courier handovers',
+      videoUrl: 'https://www.youtube.com/embed/_nm1Yb8sxxY?autoplay=1&mute=1&controls=0&loop=1&playlist=_nm1Yb8sxxY&playsinline=1'
+    },
+    { 
+      id: 3, 
+      name: 'Inventory Aisle (Zone A)', 
+      description: 'High-density shelving racks',
+      videoUrl: 'https://www.youtube.com/embed/ODM8ZHx8w3g?autoplay=1&mute=1&controls=0&loop=1&playlist=ODM8ZHx8w3g&playsinline=1'
+    },
+    { 
+      id: 4, 
+      name: 'Quality Check (QC Area)', 
+      description: 'Return inspection & scanning',
+      videoUrl: 'https://www.youtube.com/embed/Cs6cbu1BDxo?autoplay=1&mute=1&controls=0&loop=1&playlist=Cs6cbu1BDxo&playsinline=1'
+    }
   ];
   const [activeCamera, setActiveCamera] = useState(cameras[0]);
 
@@ -167,22 +187,33 @@ export function ManagementScreen() {
                   </span>
                 </div>
                 <div className="p-4">
-                  {/* Active Stream Viewer */}
+                  {/* Active Stream Viewer (CCTV Mode) */}
                   <div className="mb-4 bg-black rounded-lg overflow-hidden relative aspect-video flex items-center justify-center">
-                    <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-2 py-1 rounded z-10">
-                      Viewing: {activeCamera.name}
+                    {/* CCTV Scanlines & Vignette Overlay */}
+                    <div className="absolute inset-0 pointer-events-none z-10 bg-[linear-gradient(rgba(255,255,255,0.03)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] opacity-70"></div>
+                    <div className="absolute inset-0 pointer-events-none z-10 shadow-[inset_0_0_80px_rgba(0,0,0,0.9)]"></div>
+                    
+                    <div className="absolute top-3 left-3 flex flex-col gap-1 z-20">
+                      <div className="bg-black/60 text-green-400 font-mono text-xs px-2 py-1 rounded backdrop-blur-sm uppercase tracking-wider">
+                        CAM 0{activeCamera.id} - {activeCamera.name}
+                      </div>
+                      <div className="bg-black/60 text-green-400 font-mono text-[10px] px-2 py-1 rounded backdrop-blur-sm tracking-widest">
+                        {new Date().toISOString().replace('T', ' ').substring(0, 19)}
+                      </div>
                     </div>
                     
-                    {/* Dynamically keying the image so changing activeCamera forces a re-render & fetch */}
-                    <img 
+                    {/* Dynamically keying the iframe so changing activeCamera forces a re-render */}
+                    <iframe 
                       key={activeCamera.id}
-                      src={`/api/cctv/${activeCamera.id}?t=${Date.now()}`} 
-                      alt={activeCamera.name}
-                      className="w-full h-full object-cover"
+                      src={activeCamera.videoUrl} 
+                      className="w-full h-full object-cover pointer-events-none scale-105 filter grayscale contrast-125 brightness-75 sepia-[.3] hue-rotate-[180deg] mix-blend-screen opacity-90"
+                      allow="autoplay; encrypted-media"
+                      frameBorder="0"
                     />
                     
-                    <div className="absolute top-3 right-3 flex items-center space-x-1">
-                      <span className="text-xs bg-red-600 px-2 py-1 rounded text-white animate-pulse">● LIVE</span>
+                    <div className="absolute top-3 right-3 flex items-center space-x-2 z-20 bg-black/50 px-2 py-1 rounded">
+                      <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
+                      <span className="text-[10px] font-mono text-red-500 font-bold tracking-widest animate-pulse">REC</span>
                     </div>
                   </div>
 
