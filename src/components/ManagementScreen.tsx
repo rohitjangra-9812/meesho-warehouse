@@ -81,7 +81,9 @@ export function ManagementScreen() {
     fetchData();
     const interval = setInterval(fetchData, 30000); // refresh dashboard every 30s
     return () => clearInterval(interval);
-  }, []);
+    window.addEventListener('auto-refresh', fetchData);
+  return () => window.removeEventListener('auto-refresh', fetchData);
+}, []);
 
   const handleSeed = async () => {
     try {

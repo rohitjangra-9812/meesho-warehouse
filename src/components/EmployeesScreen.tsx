@@ -44,7 +44,9 @@ export function EmployeesScreen() {
 
   useEffect(() => {
     fetchEmployees();
-  }, []);
+    window.addEventListener('auto-refresh', fetchEmployees);
+  return () => window.removeEventListener('auto-refresh', fetchEmployees);
+}, []);
 
   const handleSeed = async () => {
     try {

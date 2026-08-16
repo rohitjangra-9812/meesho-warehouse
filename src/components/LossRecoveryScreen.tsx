@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Search, BrainCircuit, Activity, Barcode, ShieldAlert } from 'lucide-react';
 import { AlertOctagon, TrendingDown, Clock, Banknote, PackageOpen, CheckCircle, Calculator, Download, ShieldCheck  , Video } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -18,6 +19,32 @@ export function LossRecoveryScreen() {
     'https://www.youtube.com/embed/Cs6cbu1BDxo?autoplay=1&mute=1&controls=0&playsinline=1'
   ];
   const feedNames = ['Main Floor', 'Dispatch', 'Inventory', 'QC Station'];
+
+  const [scanInput, setScanInput] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [logs, setLogs] = useState([
+    { id: 'ITM-991', damage: 'Water Damage', rootCause: 'Transit Shock / Weather', confidence: 94, status: 'Logged' },
+    { id: 'ITM-422', damage: 'Crushed Box', rootCause: 'Improper Stacking', confidence: 88, status: 'Logged' },
+  ]);
+
+  const handleScan = () => {
+    if(!scanInput) return;
+    setScanning(true);
+    setTimeout(() => {
+      let rootCause = 'Unknown';
+      let confidence = 85;
+      const lower = scanInput.toLowerCase();
+      if(lower.includes('crush') || lower.includes('bent')) rootCause = 'Improper Stacking / Handling';
+      else if(lower.includes('water') || lower.includes('wet')) { rootCause = 'Transit Shock / Weather'; confidence = 95; }
+      else if(lower.includes('miss') || lower.includes('empty')) { rootCause = 'Vendor Shortage / Theft'; confidence = 92; }
+      else rootCause = 'General Wear / Forklift Error';
+      
+      setLogs([{ id: `ITM-${Math.floor(Math.random()*1000)}`, damage: scanInput, rootCause, confidence, status: 'Categorized' }, ...logs]);
+      setScanInput('');
+      setScanning(false);
+    }, 1500);
+  };
+
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -188,6 +215,74 @@ export function LossRecoveryScreen() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      
+      {/* AI Loss Prevention Scanner */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <div className="flex items-center gap-3 mb-6 border-b border-gray-200 pb-4">
+          <div className="bg-purple-100 p-3 rounded-xl">
+            <BrainCircuit className="w-8 h-8 text-purple-600" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">AI Loss Prevention Scanner</h2>
+            <p className="text-gray-500 text-sm">Automated reporting for damaged items, shrinkage, and discrepancies.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1 space-y-4">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <label className="block text-sm font-bold text-gray-700 mb-2">Log Discrepancy / Damage</label>
+              <textarea 
+                value={scanInput}
+                onChange={e => setScanInput(e.target.value)}
+                placeholder="e.g. 'Box arrived completely crushed on one side' or 'Missing 3 units'"
+                className="w-full bg-white border border-gray-300 rounded-lg p-3 h-24 mb-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+              ></textarea>
+              <button 
+                onClick={handleScan}
+                disabled={scanning || !scanInput}
+                className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
+              >
+                {scanning ? <Activity className="w-5 h-5 animate-spin" /> : <Barcode className="w-5 h-5" />}
+                {scanning ? 'AI Analyzing Root Cause...' : 'Run AI Categorization'}
+              </button>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden h-full flex flex-col">
+              <div className="bg-gray-50 p-3 border-b border-gray-200 flex justify-between items-center">
+                <span className="font-bold text-gray-700 text-sm flex items-center gap-2"><Search className="w-4 h-4"/> Recent AI Scans</span>
+                <span className="text-xs font-bold bg-gray-200 text-gray-600 px-2 py-1 rounded-full">{logs.length} Records</span>
+              </div>
+              <div className="p-2 overflow-y-auto max-h-[250px] space-y-2 flex-1">
+                {logs.map((log, i) => (
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-red-100 p-2 rounded-lg mt-1">
+                        <ShieldAlert className="w-4 h-4 text-red-600" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-900">{log.id}</span>
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">{log.confidence}% Match</span>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-1">"{log.damage}"</p>
+                      </div>
+                    </div>
+                    <div className="sm:text-right">
+                      <p className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-1">Root Cause</p>
+                      <span className="text-sm font-semibold text-gray-800 bg-white border border-gray-300 px-2 py-1 rounded-md">{log.rootCause}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 1. Administrative Approval Delays */}

@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import {  integer, pgTable, serial, text, timestamp , boolean } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -17,6 +17,10 @@ export const products = pgTable('products', {
   stockQuantity: integer('stock_quantity').notNull().default(0),
   binLocation: text('bin_location').notNull(),
   lowStockThreshold: integer('low_stock_threshold').notNull().default(20),
+  sourceVehicle: text('source_vehicle'),
+  qualityRate: text('quality_rate'),
+  category: text('category'),
+  price: integer('price'),
 });
 
 export const orders = pgTable('orders', {
@@ -252,4 +256,43 @@ export const scannerMaintenanceLogs = pgTable('scanner_maintenance_logs', {
   description: text('description').notNull(),
   date: timestamp('date').defaultNow(),
   technician: text('technician').notNull(),
+});
+
+export const crossDocking = pgTable('cross_docking', {
+  id: serial('id').primaryKey(),
+  inboundShipmentId: text('inbound_shipment_id').notNull(),
+  outboundDockId: text('outbound_dock_id').notNull(),
+  status: text('status').notNull().default('Pending'), // Pending, Transferred, Cancelled
+  priority: text('priority').notNull().default('Normal'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const inspections = pgTable('inspections', {
+  id: serial('id').primaryKey(),
+  shipmentId: text('shipment_id').notNull(),
+  passFail: text('pass_fail').notNull(), // Pass, Fail, Hold
+  defectCategory: text('defect_category'),
+  quarantineHold: boolean('quarantine_hold').default(false),
+  inspector: text('inspector').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const specialZones = pgTable('special_zones', {
+  id: serial('id').primaryKey(),
+  itemName: text('item_name').notNull(),
+  hazardClass: text('hazard_class').notNull(),
+  tempRequired: text('temp_required'),
+  currentTemp: text('current_temp'),
+  location: text('location').notNull(),
+  complianceStatus: text('compliance_status').notNull().default('Compliant'), // Compliant, Review, Violation
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const packagingLedger = pgTable('packaging_ledger', {
+  id: serial('id').primaryKey(),
+  materialType: text('material_type').notNull(),
+  currentStock: integer('current_stock').notNull(),
+  reorderThreshold: integer('reorder_threshold').notNull(),
+  autoReorderTriggered: boolean('auto_reorder_triggered').default(false),
+  lastRestockDate: timestamp('last_restock_date').defaultNow(),
 });

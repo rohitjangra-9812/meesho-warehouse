@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchApi } from '../lib/api.ts';
-import { Truck, Clock, CalendarCheck, CalendarRange, Navigation, Settings, Plus, X, AlertTriangle, Camera, Activity, TrendingUp } from 'lucide-react';
+import { Truck, Clock, CalendarCheck, CalendarRange, Navigation, Settings, Plus, X, AlertTriangle, Camera, Activity, TrendingUp, Mic, MicOff } from 'lucide-react';
 
 interface DockDoor {
   id: number;
@@ -45,6 +45,22 @@ export function DockManagementScreen() {
   const [doors, setDoors] = useState<DockDoor[]>([]);
   const [vehicles, setVehicles] = useState<VehicleLog[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [tags, setTags] = useState<Record<number, string[]>>({});
+  const [newTagInput, setNewTagInput] = useState<Record<number, string>>({});
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+
+  const addTag = (id: number, tag: string) => {
+    if (!tag.trim()) return;
+    setTags(prev => ({ ...prev, [id]: [...(prev[id] || []), tag.trim()] }));
+    setNewTagInput(prev => ({ ...prev, [id]: '' }));
+  };
+
+  const removeTag = (id: number, tagToRemove: string) => {
+    setTags(prev => ({ ...prev, [id]: prev[id].filter(t => t !== tagToRemove) }));
+  };
+
   const [optimalPath, setOptimalPath] = useState<{ optimalPath: string, congestionLevel: number } | null>(null);
 
   // New Booking State
@@ -56,13 +72,121 @@ export function DockManagementScreen() {
   const [alertDismissed, setAlertDismissed] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'history'>('dashboard');
   
-  const alertHistory = [
+  const [alertHistory, setAlertHistory] = useState([
     { id: 1, timestamp: '2026-08-10T14:30:00Z', location: 'Gate A (Inbound)', severity: 'High', description: 'Surge of 15 expected vehicles within 30 minutes.' },
     { id: 2, timestamp: '2026-08-09T09:15:00Z', location: 'Dock 08-10', severity: 'Medium', description: 'Occupancy exceeded 80% for over 2 hours.' },
     { id: 3, timestamp: '2026-08-08T18:45:00Z', location: 'Warehouse Packing & Docks Gate', severity: 'Critical', description: 'High trafficking occurred in the warehouse packing and the docks gate.' },
     { id: 4, timestamp: '2026-08-07T11:20:00Z', location: 'Yard Staging Area', severity: 'High', description: 'Yard capacity reached 95%. Traffic diverted.' },
-  ];
+  ]);
 
+
+  
+  const [isListening, setIsListening] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState('');
+
+  const processVoiceCommand = async (command: string) => {
+    const text = command.toLowerCase();
+    
+    // Command 1: mark gate X available/occupied
+    const markGateMatch = text.match(/mark gate (\d+) (available|occupied)/);
+    if (markGateMatch) {
+      const gateNum = markGateMatch[1].padStart(2, '0');
+      const statusInput = markGateMatch[2];
+      const newStatus = statusInput === 'available' ? 'Available' : 'Occupied';
+      
+      const targetDoor = doors.find(d => d.doorNumber === `Dock-${gateNum}`);
+      if (targetDoor) {
+        try {
+          await fetchApi(`/docks/doors/${targetDoor.id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status: newStatus })
+          });
+          setVoiceFeedback(`Gate ${gateNum} marked as ${newStatus}.`);
+          loadData();
+        } catch (e) {
+          setVoiceFeedback(`Failed to update Gate ${gateNum}.`);
+        }
+      } else {
+        setVoiceFeedback(`Gate ${gateNum} not found.`);
+      }
+      return;
+    }
+
+    // Command 2: alert high value truck
+    if (text.includes("alert high value") || text.includes("alert high-value")) {
+      const newAlert = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        location: 'Voice Command',
+        severity: 'Critical',
+        description: 'High-value truck alert triggered by voice.'
+      };
+      setAlertHistory(prev => [newAlert, ...prev]);
+      setVoiceFeedback('Alert created for high-value truck.');
+      return;
+    }
+
+    setVoiceFeedback(`Command not recognized: "${command}"`);
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      // It will stop automatically, or we can't easily stop without saving recognition instance to ref.
+      setIsListening(false);
+      setVoiceFeedback('');
+      return;
+    }
+
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setVoiceFeedback('Speech recognition is not supported in this browser.');
+      return;
+    }
+    
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setVoiceFeedback('Listening for command (e.g., "Mark gate 5 available" or "Alert high-value truck")...');
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      processVoiceCommand(transcript);
+    };
+
+    recognition.onerror = (event: any) => {
+      setIsListening(false);
+      setVoiceFeedback('Error listening to voice command.');
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      setTimeout(() => setVoiceFeedback(''), 5000);
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error(e);
+      setIsListening(false);
+    }
+  };
+
+
+  const getExtendedDetails = (v: VehicleLog) => {
+    const hash = v.id * 89231;
+    const origins = ['Mumbai Hub', 'Delhi Node', 'Bangalore Central', 'Chennai Sort', 'Kolkata Depot', 'Pune DC', 'Hyderabad Facility'];
+    const origin = origins[hash % origins.length];
+    
+    const classifications = ['24ft Container', 'Multi-Axle Flatbed', 'Refrigerated Reefer', 'LCV Tata Ace', '32ft High Cube'];
+    const classification = classifications[hash % classifications.length];
+    
+    return { origin, classification };
+  };
 
   const totalDoors = doors.length;
   const occupiedDoors = doors.filter(d => d.status === 'Occupied').length;
@@ -102,7 +226,11 @@ export function DockManagementScreen() {
 
   useEffect(() => {
     loadData();
-  }, []);
+    window.addEventListener('auto-refresh', loadData);
+  
+
+  return () => window.removeEventListener('auto-refresh', loadData);
+}, []);
 
   const handleSeedDoors = async () => {
     try {
@@ -160,6 +288,13 @@ export function DockManagementScreen() {
             </button>
           )}
           <button 
+            onClick={toggleListening}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isListening ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          >
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {isListening ? 'Stop' : 'Voice Command'}
+          </button>
+          <button 
             onClick={() => setShowBooking(true)}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
@@ -168,7 +303,22 @@ export function DockManagementScreen() {
         </div>
       </div>
 
-            <div className="flex gap-6 border-b border-gray-200">
+            
+      {voiceFeedback && (
+        <div className={`p-4 rounded-xl shadow-sm border flex items-center gap-3 ${voiceFeedback.includes('Error') || voiceFeedback.includes('Failed') || voiceFeedback.includes('not found') || voiceFeedback.includes('not recognized') ? 'bg-red-50 border-red-200 text-red-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+          {isListening ? (
+             <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+             </span>
+          ) : (
+             <Mic className="h-5 w-5 opacity-70" />
+          )}
+          <span className="text-sm font-medium">{voiceFeedback}</span>
+        </div>
+      )}
+
+      <div className="flex gap-6 border-b border-gray-200">
         <button 
           onClick={() => setActiveTab('dashboard')} 
           className={`pb-4 px-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
@@ -289,7 +439,7 @@ export function DockManagementScreen() {
                   ))}
                   {vehicles.filter(v => v.status === 'Docked').length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-500">No vehicles currently docked.</td>
+                      <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">No vehicles currently docked.</td>
                     </tr>
                   )}
                 </tbody>
@@ -399,84 +549,97 @@ export function DockManagementScreen() {
           <div className="p-6 border-b border-gray-200 bg-gray-50">
             <h3 className="font-bold text-gray-900 flex items-center gap-2"><CalendarRange className="w-5 h-5 text-gray-500" /> Vehicle Log & Yard Traffic</h3>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-white">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Vehicle & Type</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Time/Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Dock/Driver</th>
-                  <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {vehicles.map(v => (
-                  <tr key={v.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold text-gray-900">{v.vehicleNumber}</span>
-                        <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200 mt-0.5 w-max">
-                          {getStateName(v.vehicleNumber)}
-                        </span>
-                        <span className="text-xs text-gray-500 mt-1">{v.carrierName}</span>
-                        <span className={`text-xs mt-1 w-max px-2 py-0.5 rounded-full font-medium ${v.type === 'Inbound' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                          {v.type}
+          
+          <div className="p-6 bg-gray-50/50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {vehicles.map(v => {
+                const ext = getExtendedDetails(v);
+                return (
+                  <div key={v.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div className={`absolute top-0 left-0 w-1 h-full ${v.status === 'Expected' ? 'bg-blue-400' : v.status === 'Arrived' ? 'bg-yellow-400' : v.status === 'Docked' ? 'bg-orange-400' : 'bg-green-400'}`}></div>
+                    
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-mono text-lg font-bold text-gray-900 tracking-tight">{v.vehicleNumber}</span>
+                          <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold ${v.type === 'Inbound' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>{v.type}</span>
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700">{v.carrierName}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold ${
+                          v.status === 'Expected' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                          v.status === 'Arrived' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                          v.status === 'Docked' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                          'bg-green-50 text-green-700 border border-green-200'
+                        }`}>
+                          {v.status === 'Docked' && doors.find(d => d.id === v.dockDoorId) ? `${v.status} (${doors.find(d => d.id === v.dockDoorId)?.doorNumber})` : v.status}
                         </span>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-900 font-medium">
-                          {v.status}
-                        </span>
-                        {v.scheduledTime && (
-                          <span className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                            <Clock className="w-3 h-3" /> {new Date(v.scheduledTime).toLocaleString([], {hour: '2-digit', minute:'2-digit', month: 'short', day: 'numeric'})}
-                          </span>
-                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-4 border-t border-b border-gray-100 py-3 mt-3">
+                      <div>
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Origin / Destination</p>
+                        <p className="text-xs font-medium text-gray-900 line-clamp-1">{ext.origin}</p>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex flex-col">
-                        {v.dockDoorId ? (
-                          <span className="font-bold text-gray-900">{doors.find(d => d.id === v.dockDoorId)?.doorNumber}</span>
-                        ) : (
-                          <span className="text-gray-400">No Dock</span>
-                        )}
-                        <span className="text-xs mt-1">{v.driverName} ({v.driverContact})</span>
+                      <div>
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Classification</p>
+                        <p className="text-xs font-medium text-gray-900 line-clamp-1">{ext.classification}</p>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="flex flex-col items-end gap-2">
+                      <div>
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Driver Info</p>
+                        <p className="text-xs font-medium text-gray-900">{v.driverName}</p>
+                        <p className="text-xs font-mono text-gray-500">{v.driverContact}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Time Log</p>
+                        <p className="text-xs font-medium text-gray-900">{v.checkInTime ? new Date(v.checkInTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : new Date(v.scheduledTime || '').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                        <p className="text-[10px] text-gray-500">{v.checkInTime ? 'Checked In' : 'Scheduled'}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2">
                         {v.status === 'Expected' && (
-                          <button onClick={() => updateStatus(v.id, 'Arrived')} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium transition-colors">Check-In</button>
+                          <button onClick={() => updateStatus(v.id, 'Arrived')} className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-sm">
+                            Mark Arrived
+                          </button>
                         )}
                         {v.status === 'Arrived' && (
-                          <select 
-                            onChange={(e) => updateStatus(v.id, 'Docked', Number(e.target.value))}
-                            className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-2 py-1 outline-none"
-                            defaultValue=""
-                          >
-                            <option value="" disabled>Assign Dock</option>
-                            {doors.filter(d => d.status === 'Available').map(d => (
-                              <option key={d.id} value={d.id}>{d.doorNumber}</option>
-                            ))}
-                          </select>
+                           <div className="flex items-center gap-2 w-full justify-between">
+                             <select id={`dock-${v.id}`} className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-gray-50 outline-none flex-1 font-medium">
+                               <option value="">Assign Dock...</option>
+                               {doors.filter(d => d.status === 'Available').map(d => (
+                                 <option key={d.id} value={d.id}>{d.doorNumber}</option>
+                               ))}
+                             </select>
+                             <button onClick={() => {
+                               const select = document.getElementById(`dock-${v.id}`) as HTMLSelectElement;
+                               if (select.value) updateStatus(v.id, 'Docked', Number(select.value));
+                             }} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-sm">
+                               Dock
+                             </button>
+                           </div>
                         )}
                         {v.status === 'Docked' && (
-                          <button onClick={() => updateStatus(v.id, 'Departed')} className="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 px-3 py-1.5 rounded-lg font-medium transition-colors">Release & Check-Out</button>
+                          <button onClick={() => updateStatus(v.id, 'Departed')} className="bg-orange-100 hover:bg-orange-200 text-orange-800 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-sm w-full">
+                            Release Vehicle
+                          </button>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {vehicles.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500 text-sm">No vehicles scheduled or logged.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                        {v.status === 'Departed' && (
+                           <span className="text-xs font-medium text-gray-500 italic py-1.5">Completed</span>
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
+              {vehicles.length === 0 && (
+                <div className="col-span-1 md:col-span-2 text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
+                  <Truck className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                  <p>No vehicles logged for today.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

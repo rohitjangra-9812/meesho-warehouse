@@ -48,7 +48,9 @@ export function HubsScreen() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+    window.addEventListener('auto-refresh', fetchData);
+  return () => window.removeEventListener('auto-refresh', fetchData);
+}, []);
 
   const fetchData = async () => {
     try {

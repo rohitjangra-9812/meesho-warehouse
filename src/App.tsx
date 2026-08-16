@@ -7,6 +7,13 @@ import React, { useEffect, useState, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { fetchApi, setApiToken } from './lib/api.ts';
 import { InventoryScreen } from './components/InventoryScreen.tsx';
+
+import { CrossDockingScreen } from './components/CrossDockingScreen.tsx';
+import { QualityControlScreen } from './components/QualityControlScreen.tsx';
+import { SpecialZonesScreen } from './components/SpecialZonesScreen.tsx';
+import { PackagingLedgerScreen } from './components/PackagingLedgerScreen.tsx';
+import { WarehouseLayoutScreen } from './components/WarehouseLayoutScreen.tsx';
+
 import { EmployeesScreen } from './components/EmployeesScreen.tsx';
 import { ManagementScreen } from './components/ManagementScreen.tsx';
 import { NoticesScreen } from './components/NoticesScreen.tsx';
@@ -20,8 +27,8 @@ import { FulfillmentScreen } from './components/FulfillmentScreen.tsx';
 import { TreasuryScreen } from './components/TreasuryScreen.tsx';
 import { DockManagementScreen } from './components/DockManagementScreen.tsx';
 import { LossRecoveryScreen } from './components/LossRecoveryScreen.tsx';
-import { ScannerHubScreen } from './components/ScannerHubScreen.tsx';
-import { Boxes, LogOut, Users, Briefcase, FileText, IndianRupee, Clock, Activity, Truck, Shield, MapPin, PackageOpen, Landmark, Navigation, ScanBarcode, Cloud, RefreshCw, CheckCircle2, Database, AlertTriangle, X } from 'lucide-react';
+import { FleetTrackingScreen } from './components/FleetTrackingScreen.tsx';
+import {  Boxes, LogOut, Users, Briefcase, FileText, IndianRupee, Clock, Activity, Truck, Shield, MapPin, PackageOpen, Landmark, Navigation, ScanBarcode, Cloud, RefreshCw, CheckCircle2, Database, AlertTriangle, X, Map , Settings, TrendingUp } from 'lucide-react';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -186,7 +193,7 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
     { path: '/analytics', label: 'Analytics', icon: Activity },
     { path: '/fulfillment', label: 'Fulfillment & Shipping', icon: PackageOpen },
     { path: '/docks', label: 'Dock Management', icon: Navigation },
-    { path: '/scanners', label: 'Barcode & RFID', icon: ScanBarcode },
+    { path: '/fleet', label: 'Fleet Tracking', icon: Map },
     { path: '/inventory', label: 'Inventory', icon: Boxes },
     { path: '/vendors', label: 'Vendors', icon: Truck },
     { path: '/treasury', label: 'Bank & Treasury', icon: Landmark },
@@ -200,13 +207,18 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
     { path: '/loss-recovery', label: 'Loss & Recovery', icon: AlertTriangle },
   ];
 
-  const meeshoWatermarkSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><text x="200" y="100" font-family="Arial" font-size="40" font-weight="bold" fill="rgba(0,0,0,0.03)" text-anchor="middle" transform="rotate(-30, 200, 100)">MEESHO WAREHOUSE</text></svg>`;
+  const meeshoLogoUrl = 'https://upload.wikimedia.org/wikipedia/commons/3/33/Meesho_logo.png';
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans relative z-0">
       <div 
-        className="absolute inset-0 pointer-events-none z-[-1] opacity-50"
-        style={{ backgroundImage: `url('${meeshoWatermarkSvg}')`, backgroundRepeat: 'repeat', backgroundSize: '400px 200px' }}
+        className="fixed inset-0 pointer-events-none z-[-1] opacity-15"
+        style={{ 
+          backgroundImage: `url('${meeshoLogoUrl}')`, 
+          backgroundRepeat: 'no-repeat', 
+          backgroundPosition: 'center center',
+          backgroundSize: '500px'
+        }}
       ></div>
       <aside className="w-64 bg-white/90 backdrop-blur-md border-r border-gray-200 flex flex-col hidden md:flex">
         <div className="p-6 border-b border-gray-200">
@@ -334,8 +346,15 @@ export default function App() {
           <Route path="/" element={<Navigate to="/analytics" />} />
           <Route path="/analytics" element={<ProtectedRoute><DashboardLayout><AnalyticsScreen /></DashboardLayout></ProtectedRoute>} />
           <Route path="/docks" element={<ProtectedRoute><DashboardLayout><DockManagementScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/scanners" element={<ProtectedRoute><DashboardLayout><ScannerHubScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/fleet" element={<ProtectedRoute><DashboardLayout><FleetTrackingScreen /></DashboardLayout></ProtectedRoute>} />
           <Route path="/fulfillment" element={<ProtectedRoute><DashboardLayout><FulfillmentScreen /></DashboardLayout></ProtectedRoute>} />
+          
+          <Route path="/cross-docking" element={<ProtectedRoute><DashboardLayout><CrossDockingScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/qc-inspections" element={<ProtectedRoute><DashboardLayout><QualityControlScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/special-zones" element={<ProtectedRoute><DashboardLayout><SpecialZonesScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/packaging-ledger" element={<ProtectedRoute><DashboardLayout><PackagingLedgerScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/heatmap" element={<ProtectedRoute><DashboardLayout><WarehouseLayoutScreen /></DashboardLayout></ProtectedRoute>} />
+
           <Route path="/inventory" element={<ProtectedRoute><DashboardLayout><InventoryScreen /></DashboardLayout></ProtectedRoute>} />
           <Route path="/vendors" element={<ProtectedRoute><DashboardLayout><VendorScreen /></DashboardLayout></ProtectedRoute>} />
           <Route path="/treasury" element={<ProtectedRoute><DashboardLayout><TreasuryScreen /></DashboardLayout></ProtectedRoute>} />

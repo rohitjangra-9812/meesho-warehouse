@@ -63,7 +63,9 @@ export function ScannerHubScreen() {
     // Simulate live logs polling
     const interval = setInterval(loadData, 10000);
     return () => clearInterval(interval);
-  }, []);
+    window.addEventListener('auto-refresh', loadData);
+  return () => window.removeEventListener('auto-refresh', loadData);
+}, []);
 
   const handleSeed = async () => {
     try {
