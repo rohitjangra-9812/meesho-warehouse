@@ -1,103 +1,49 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, Link, useNavigate } from 'react-router-dom';
+import { 
+  Video,
+  LayoutDashboard, 
+  ArrowDownToLine, 
+  ArrowUpFromLine, 
+  PackageSearch, 
+  RotateCcw, 
+  Search, 
+  ScanLine,
+  LogOut,
+  X
+, Landmark, Users, BookOpen, Truck, BrainCircuit, ScanBarcode , Shield } from "lucide-react";
+import { setApiToken } from './lib/api.ts';
+import { LoginScreen } from './components/LoginScreen';
+import { DashboardScreen } from './components/DashboardScreen';
+import { InboundScreen } from './components/InboundScreen';
+import { OutboundScreen } from './components/OutboundScreen';
+import { InventoryScreen } from './components/InventoryScreen';
+import { ReturnsScreen } from './components/ReturnsScreen';
+import { BankingScreen } from './components/BankingScreen';
+import { EmployeeScreen } from './components/EmployeeScreen';
+import { CatalogScreen } from './components/CatalogScreen';
+import { DockScreen } from './components/DockScreen';
+import { AIOperationsScreen } from './components/AIOperationsScreen';
+import { ScannerScreen } from './components/ScannerScreen';
+import { LeadershipScreen } from './components/LeadershipScreen';
+import { SurveillanceScreen } from './components/SurveillanceScreen';
 
-import React, { useEffect, useState, createContext, useContext } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
-import { fetchApi, setApiToken } from './lib/api.ts';
-import { InventoryScreen } from './components/InventoryScreen.tsx';
-
-import { CrossDockingScreen } from './components/CrossDockingScreen.tsx';
-import { QualityControlScreen } from './components/QualityControlScreen.tsx';
-import { SpecialZonesScreen } from './components/SpecialZonesScreen.tsx';
-import { PackagingLedgerScreen } from './components/PackagingLedgerScreen.tsx';
-import { WarehouseLayoutScreen } from './components/WarehouseLayoutScreen.tsx';
-
-import { EmployeesScreen } from './components/EmployeesScreen.tsx';
-import { ManagementScreen } from './components/ManagementScreen.tsx';
-import { NoticesScreen } from './components/NoticesScreen.tsx';
-import { SalaryScreen } from './components/SalaryScreen.tsx';
-import { AttendanceScreen } from './components/AttendanceScreen.tsx';
-import { AnalyticsScreen } from './components/AnalyticsScreen.tsx';
-import { VendorScreen } from './components/VendorScreen.tsx';
-import { HrScreen } from './components/HrScreen.tsx';
-import { HubsScreen } from './components/HubsScreen.tsx';
-import { FulfillmentScreen } from './components/FulfillmentScreen.tsx';
-import { TreasuryScreen } from './components/TreasuryScreen.tsx';
-import { DockManagementScreen } from './components/DockManagementScreen.tsx';
-import { LossRecoveryScreen } from './components/LossRecoveryScreen.tsx';
-import { FleetTrackingScreen } from './components/FleetTrackingScreen.tsx';
-import {  Boxes, LogOut, Users, Briefcase, FileText, IndianRupee, Clock, Activity, Truck, Shield, MapPin, PackageOpen, Landmark, Navigation, ScanBarcode, Cloud, RefreshCw, CheckCircle2, Database, AlertTriangle, X, Map , Settings, TrendingUp } from 'lucide-react';
-
-interface AuthContextType {
-  isAuthenticated: boolean;
-  login: (pin: string) => void;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextType>({ isAuthenticated: false, login: () => {}, logout: () => {} });
+const AuthContext = createContext<{ isAuthenticated: boolean; checkAuth: () => void }>({ 
+  isAuthenticated: false, 
+  checkAuth: () => {} 
+});
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('secret_pin'));
-
-  const login = (pin: string) => {
-    localStorage.setItem('secret_pin', pin);
-    setApiToken(pin);
-    setIsAuthenticated(true);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('secret_pin');
-    setApiToken(null);
-    setIsAuthenticated(false);
-  };
-
-  return <AuthContext.Provider value={{ isAuthenticated, login, logout }}>{children}</AuthContext.Provider>;
-}
-
-function LoginScreen() {
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState('');
-  const { login, isAuthenticated } = useContext(AuthContext);
-
-  if (isAuthenticated) {
-    return <Navigate to="/" />;
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pin === '1234') { // Secret PIN
-      login(pin);
-    } else {
-      setError('Invalid PIN');
-    }
+  
+  const checkAuth = () => {
+    setIsAuthenticated(!!localStorage.getItem('secret_pin'));
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-900">
-      <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100 max-w-md w-full text-center">
-        <h1 className="text-3xl font-bold mb-2 tracking-tight text-gray-900">Meesho WMS</h1>
-        <p className="text-gray-500 mb-8">Enter secret PIN (1234) to access the dashboard</p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="password"
-            value={pin}
-            onChange={(e) => { setPin(e.target.value); setError(''); }}
-            placeholder="Enter PIN"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-center text-xl tracking-widest"
-            autoFocus
-          />
-          {error && <p className="text-red-500 text-sm text-left">{error}</p>}
-          <button
-            type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            Sign In
-          </button>
-        </form>
-      </div>
-    </div>
+    <AuthContext.Provider value={{ isAuthenticated, checkAuth }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 
@@ -107,128 +53,55 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+const navItems = [
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+  { icon: Landmark, label: 'Banking', path: '/banking' },
+  { icon: Users, label: 'Employees', path: '/employees' },
+  { icon: Shield, label: 'Leadership', path: '/leadership' },
+  { icon: BookOpen, label: 'Catalog', path: '/catalog' },
+  { icon: Truck, label: 'Docks', path: '/docks' },
+  { icon: BrainCircuit, label: 'AI Operations', path: '/ai-operations' },
+  { icon: ScanBarcode, label: 'Scan Station', path: '/scanner' },
+  { icon: Video, label: 'CCTV Security', path: '/cctv' }
+];
+
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { logout } = useContext(AuthContext);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSynced, setLastSynced] = useState<Date | null>(new Date());
-  const [showTrafficAlert, setShowTrafficAlert] = useState(false);
-  const [alertDismissed, setAlertDismissed] = useState(false);
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
 
-  useEffect(() => {
-    // Detect high traffic alert based on the timestamp constraint (2 hours)
-    const alertCreatedAt = new Date('2026-08-10T23:54:42-07:00').getTime();
-    const twoHoursMs = 2 * 60 * 60 * 1000;
-    const now = Date.now();
-    
-    if (now < alertCreatedAt + twoHoursMs && !alertDismissed) {
-      setShowTrafficAlert(true);
-      
-      try {
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContext) {
-          const ctx = new AudioContext();
-          const osc = ctx.createOscillator();
-          const gainNode = ctx.createGain();
-          
-          osc.type = 'square';
-          // Create a loud two-tone siren effect for 20 seconds
-          const duration = 20.0;
-          for (let i = 0; i < duration; i += 0.8) {
-            osc.frequency.setValueAtTime(880, ctx.currentTime + i);
-            if (i + 0.4 < duration) {
-              osc.frequency.setValueAtTime(1100, ctx.currentTime + i + 0.4);
-            }
-          }
-          
-          gainNode.gain.setValueAtTime(0, ctx.currentTime);
-          gainNode.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.1); // High volume
-          gainNode.gain.setValueAtTime(0.5, ctx.currentTime + duration - 0.1);
-          gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
-          
-          osc.connect(gainNode);
-          gainNode.connect(ctx.destination);
-          
-          osc.start();
-          osc.stop(ctx.currentTime + duration);
-        }
-      } catch (err) {
-        console.error("Audio playback failed", err);
-      }
-      
-      // Auto-hide the urgent banner after 10 minutes (600000 ms)
-      const timer = setTimeout(() => {
-        setShowTrafficAlert(false);
-      }, 600000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [alertDismissed]);
+  const logout = () => {
+    localStorage.removeItem('secret_pin');
+    setApiToken(null);
+    window.location.href = '/login';
+  };
 
-  useEffect(() => {
-    const syncData = async () => {
-      try {
-        setIsSyncing(true);
-        await fetchApi('/auth/sync', { method: 'POST' });
-        setLastSynced(new Date());
-      } catch (e) {
-        console.warn("Sync failed - server might be restarting or unreachable", e);
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-    
-    syncData();
-    const interval = setInterval(syncData, 60000);
-    
-    const handleRefresh = () => syncData();
-    window.addEventListener('auto-refresh', handleRefresh);
-    return () => {
-       clearInterval(interval);
-       window.removeEventListener('auto-refresh', handleRefresh);
-    };
-  }, []);
-  
-  const navItems = [
-    { path: '/analytics', label: 'Analytics', icon: Activity },
-    { path: '/fulfillment', label: 'Fulfillment & Shipping', icon: PackageOpen },
-    { path: '/docks', label: 'Dock Management', icon: Navigation },
-    { path: '/fleet', label: 'Fleet Tracking', icon: Map },
-    { path: '/inventory', label: 'Inventory', icon: Boxes },
-    { path: '/vendors', label: 'Vendors', icon: Truck },
-    { path: '/treasury', label: 'Bank & Treasury', icon: Landmark },
-    { path: '/hubs', label: 'Hubs & Transfers', icon: MapPin },
-    { path: '/employees', label: 'Employees', icon: Users },
-    { path: '/hr', label: 'HR & Compliance', icon: Shield },
-    { path: '/management', label: 'Management', icon: Briefcase },
-    { path: '/notices', label: 'Notices', icon: FileText },
-    { path: '/salary', label: 'Salary', icon: IndianRupee },
-    { path: '/attendance', label: 'Attendance', icon: Clock },
-    { path: '/loss-recovery', label: 'Loss & Recovery', icon: AlertTriangle },
-  ];
-
-  const meeshoLogoUrl = 'https://upload.wikimedia.org/wikipedia/commons/3/33/Meesho_logo.png';
+  const handleScanSimulate = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      setSearchQuery('AWB-8349281X');
+      setIsScanning(false);
+    }, 800);
+  };
 
   return (
-    <div className="flex h-screen bg-gray-100 font-sans relative z-0">
-      <div 
-        className="fixed inset-0 pointer-events-none z-[-1] opacity-15"
-        style={{ 
-          backgroundImage: `url('${meeshoLogoUrl}')`, 
-          backgroundRepeat: 'no-repeat', 
-          backgroundPosition: 'center center',
-          backgroundSize: '500px'
-        }}
-      ></div>
-      <aside className="w-64 bg-white/90 backdrop-blur-md border-r border-gray-200 flex flex-col hidden md:flex">
-        <div className="p-6 border-b border-gray-200">
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Meesho WMS</h1>
-          <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-semibold">Warehouse Operations</p>
+    <div className="flex h-screen bg-gray-50 font-sans">
+      {/* Sidebar */}
+      <aside className="hidden md:flex w-64 flex-col bg-white border-r border-gray-200 z-20">
+        <div className="p-6 border-b border-gray-200 flex items-center gap-3">
+          <div className="bg-blue-600 text-white p-2 rounded-lg">
+            <PackageSearch size={24} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight leading-tight">WMS Portal</h1>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Warehouse Operations</p>
+          </div>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname.startsWith(item.path);
             return (
               <Link
                 key={item.path}
@@ -244,30 +117,21 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
-              WA
-            </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-medium text-gray-900 truncate">Warehouse Admin</p>
-              <p className="text-xs text-gray-500 truncate">admin@meesho.com</p>
-            </div>
-          </div>
           <button
             onClick={logout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
           >
             <LogOut size={16} />
             Sign Out
           </button>
         </div>
       </aside>
-      
+
       {/* Mobile Nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 flex justify-around p-2">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 flex justify-around p-2 pb-safe">
          {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname.startsWith(item.path);
             return (
               <Link
                 key={item.path}
@@ -283,46 +147,51 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
           })}
       </div>
 
-      <main className="flex-1 flex flex-col overflow-hidden pb-16 md:pb-0">
-        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 md:px-6 py-3 flex items-center justify-between z-10 sticky top-0">
-          <div className="flex items-center gap-2">
-             <h2 className="text-lg font-semibold text-gray-800 md:hidden">Meesho WMS</h2>
-          </div>
-          <div className="flex items-center gap-3 ml-auto">
-             <div className="flex items-center gap-2 text-sm bg-white px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">
-                {isSyncing ? (
-                  <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                )}
-                <span className="text-gray-600 font-medium">
-                   {isSyncing ? 'Syncing...' : `Synced ${lastSynced ? lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`}
-                </span>
-                {!isSyncing && <Database className="w-3.5 h-3.5 text-gray-400 ml-1" />}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden pb-16 md:pb-0">
+        <header className="bg-white border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between z-10 gap-4">
+          <div className="flex items-center gap-2 sm:hidden">
+             <div className="bg-blue-600 text-white p-1.5 rounded-lg">
+               <PackageSearch size={20} />
              </div>
+             <h2 className="text-lg font-bold text-gray-900">WMS Portal</h2>
           </div>
-        </header>
-        {showTrafficAlert && (
-          <div className="bg-red-600 text-white px-4 md:px-6 py-3 flex items-start sm:items-center justify-between shadow-md z-10 animate-in slide-in-from-top-4 fade-in duration-300">
-            <div className="flex items-start sm:items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-lg shrink-0">
-                <AlertTriangle className="w-5 h-5 animate-pulse" />
-              </div>
-              <div>
-                <p className="font-bold text-sm tracking-wide">HIGH TRAFFIC DETECTED</p>
-                <p className="text-xs text-red-100 mt-0.5">High traffic patterns detected at warehouse packing areas and dock gates. Please review orders on the portal.</p>
-              </div>
+          
+          {/* Universal Command Bar */}
+          <div className="flex-1 max-w-2xl flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input 
+                type="text" 
+                placeholder="Search by Order ID, SKU, or AWB..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-100 border-transparent rounded-lg text-sm focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all font-medium"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
             <button 
-              onClick={() => { setShowTrafficAlert(false); setAlertDismissed(true); }} 
-              className="text-white/80 hover:text-white hover:bg-white/10 p-2 rounded-lg transition-colors ml-4 shrink-0"
+              onClick={handleScanSimulate}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                isScanning ? 'bg-blue-100 text-blue-700' : 'bg-gray-900 hover:bg-gray-800 text-white'
+              }`}
             >
-              <X className="w-5 h-5" />
+              <ScanLine size={18} className={isScanning ? 'animate-pulse' : ''} />
+              <span className="hidden sm:inline">{isScanning ? 'Scanning...' : 'Scan Barcode'}</span>
             </button>
           </div>
-        )}
-        <div className="flex-1 overflow-auto p-6 md:p-8 max-w-7xl mx-auto w-full h-full">
-          {children}
+        </header>
+
+        <div className="flex-1 overflow-auto p-4 md:p-8 w-full h-full relative">
+          <div className="max-w-7xl mx-auto space-y-8">
+            {children}
+          </div>
         </div>
       </main>
     </div>
@@ -330,42 +199,21 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  useEffect(() => {
-    // Automated recurring updates every 30 minutes
-    const interval = setInterval(() => {
-      window.dispatchEvent(new Event('auto-refresh'));
-    }, 30 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginScreen />} />
-          <Route path="/" element={<Navigate to="/analytics" />} />
-          <Route path="/analytics" element={<ProtectedRoute><DashboardLayout><AnalyticsScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/docks" element={<ProtectedRoute><DashboardLayout><DockManagementScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/fleet" element={<ProtectedRoute><DashboardLayout><FleetTrackingScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/fulfillment" element={<ProtectedRoute><DashboardLayout><FulfillmentScreen /></DashboardLayout></ProtectedRoute>} />
-          
-          <Route path="/cross-docking" element={<ProtectedRoute><DashboardLayout><CrossDockingScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/qc-inspections" element={<ProtectedRoute><DashboardLayout><QualityControlScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/special-zones" element={<ProtectedRoute><DashboardLayout><SpecialZonesScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/packaging-ledger" element={<ProtectedRoute><DashboardLayout><PackagingLedgerScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/heatmap" element={<ProtectedRoute><DashboardLayout><WarehouseLayoutScreen /></DashboardLayout></ProtectedRoute>} />
-
-          <Route path="/inventory" element={<ProtectedRoute><DashboardLayout><InventoryScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/vendors" element={<ProtectedRoute><DashboardLayout><VendorScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/treasury" element={<ProtectedRoute><DashboardLayout><TreasuryScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/hubs" element={<ProtectedRoute><DashboardLayout><HubsScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/employees" element={<ProtectedRoute><DashboardLayout><EmployeesScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/hr" element={<ProtectedRoute><DashboardLayout><HrScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/management" element={<ProtectedRoute><DashboardLayout><ManagementScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/notices" element={<ProtectedRoute><DashboardLayout><NoticesScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/salary" element={<ProtectedRoute><DashboardLayout><SalaryScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/attendance" element={<ProtectedRoute><DashboardLayout><AttendanceScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/loss-recovery" element={<ProtectedRoute><DashboardLayout><LossRecoveryScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/" element={<Navigate to="/dashboard" />} />
+          <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout><DashboardScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/banking" element={<ProtectedRoute><DashboardLayout><BankingScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/employees" element={<ProtectedRoute><DashboardLayout><EmployeeScreen /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/leadership" element={<ProtectedRoute><DashboardLayout><LeadershipScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/catalog" element={<ProtectedRoute><DashboardLayout><CatalogScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/docks" element={<ProtectedRoute><DashboardLayout><DockScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/ai-operations" element={<ProtectedRoute><DashboardLayout><AIOperationsScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/scanner" element={<ProtectedRoute><DashboardLayout><ScannerScreen /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/cctv" element={<ProtectedRoute><DashboardLayout><SurveillanceScreen /></DashboardLayout></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -1,0 +1,11 @@
+      dock.lastReleasedAt = Date.now();
+      res.json(dock);
+    } else {
+      res.status(404).json({error: 'Dock not found'});
+    }
+  });
+
+    }
+  });
+
+  app.post("/api/v3/docks/simulate-arrival", requireAuth, (req, res) => {

@@ -6,7 +6,43 @@ import { crossDocking, inspections, specialZones, packagingLedger, orders, produ
 import { eq, sql, and, desc, ilike } from 'drizzle-orm';
 
 async function startServer() {
-  const app = express();
+  
+let bankBalance = 14528400;
+let bankTransactions = [
+        { id: 101, timestamp: Date.now() - 30000, counterparty: "Delhivery Surface", purpose: "Freight Charges Settlement", type: "Debit", amount: 45200, status: "Verified" },
+        { id: 102, timestamp: Date.now() - 65000, counterparty: "Apex Packaging", purpose: "Corrugated Boxes GRN", type: "Debit", amount: 125000, status: "Verified" },
+        { id: 103, timestamp: Date.now() - 95000, counterparty: "Meesho Escrow", purpose: "Daily Sales Settlement", type: "Credit", amount: 845000, status: "Completed" },
+        { id: 104, timestamp: Date.now() - 120000, counterparty: "Ramesh Customer", purpose: "RTO Refund", type: "Debit", amount: 1250, status: "Verified" }
+];
+let nextTxId = 105;
+const txTypes = [
+  { p: "Courier Logistics", a: [10000, 50000], t: "Debit", c: "Ecom Express" },
+  { p: "Warehouse Setup", a: [5000, 20000], t: "Debit", c: "Local Vendor" },
+  { p: "Sale Batch", a: [100000, 500000], t: "Credit", c: "Meesho Escrow" },
+  { p: "Customer Refund", a: [500, 2000], t: "Debit", c: "Customer" }
+];
+
+setInterval(() => {
+  const r = txTypes[Math.floor(Math.random() * txTypes.length)];
+  const amount = Math.floor(Math.random() * (r.a[1] - r.a[0]) + r.a[0]);
+  
+  if (r.t === 'Credit') bankBalance += amount;
+  else bankBalance -= amount;
+
+  bankTransactions.push({
+    id: nextTxId++,
+    timestamp: Date.now(),
+    counterparty: r.c,
+    purpose: r.p,
+    type: r.t,
+    amount: amount,
+    status: "Completed"
+  });
+
+  if (bankTransactions.length > 50) bankTransactions.shift();
+}, 5000);
+
+const app = express();
 
 app.get("/api/health", (req, res) => { res.json({ status: "ok" }); });
   const PORT = 3000;
@@ -37,10 +73,12 @@ app.get("/api/health", (req, res) => { res.json({ status: "ok" }); });
     const existingMgmt = await db.select().from(management).limit(1);
     if (existingMgmt.length === 0) {
       const leaders = [
-        { name: "Insp Rohit Jangra", role: "Warehouse Owner / Managing Director", mobile: "+91 9812603346", email: "rohitjangra.gov.in", officeLocation: "Bhiwani, Haryana", responsibilities: "Oversees overall business strategy, vendor relations with Meesho, and financial operations.", dateOfJoining: "2026-01-01T00:00:00Z" },
-        { name: "Harsh Sharma", role: "Managing Director / Operations Lead", mobile: "+91 8882271630", email: "harsh.sharma@meeshowms.com", officeLocation: "NIT Faridabad, Haryana", responsibilities: "Manages day-to-day fulfillment workflows, inventory tracking, and warehouse efficiency.", dateOfJoining: "2026-01-15T00:00:00Z" },
-        { name: "Amit Singh", role: "Logistics & Dispatch Manager", mobile: "9876543212", email: "amit.logistics@meeshowms.com", officeLocation: "Panipat Hub", responsibilities: "Coordinates shipping pipelines, courier handovers, and return logistics.", dateOfJoining: "2026-02-10T00:00:00Z" },
-        { name: "Pooja Verma", role: "HR & Administration Manager", mobile: "9876543213", email: "pooja.hr@meeshowms.com", officeLocation: "HQ - Gurugram, Haryana", responsibilities: "Handles workforce staffing, employee directories, attendance, and compliance across all departments.", dateOfJoining: "2026-02-28T00:00:00Z" }
+        { name: "Insp Rohit Jangra", role: "Warehouse Owner / Director", mobile: "+91 9812603346", email: "rohit.director@meeshowms.com", officeLocation: "Bhiwani HQ, Haryana", responsibilities: "Overall operations, licensing, site ownership, and executive strategy.", dateOfJoining: "2025-10-01T00:00:00Z" },
+        { name: "Rohit Angra", role: "HR Manager", mobile: "+91 9876500001", email: "hr.manager@meeshowms.com", officeLocation: "Admin Block A", responsibilities: "Personnel management, recruitment, compliance, and official HR signatory.", dateOfJoining: "2026-01-10T00:00:00Z" },
+        { name: "Sneha Kapoor", role: "Finance & Accounts Manager", mobile: "+91 9876500002", email: "finance@meeshowms.com", officeLocation: "Treasury Office", responsibilities: "Payroll budget, billing, vendor invoices, and treasury operations.", dateOfJoining: "2026-01-15T00:00:00Z" },
+        { name: "Harsh Sharma", role: "Shift & Floor Operations Manager", mobile: "+91 8882271630", email: "floor.ops@meeshowms.com", officeLocation: "NIT Faridabad, Haryana", responsibilities: "Inbound/outbound waves, floor safety, picker/packer assignments.", dateOfJoining: "2026-01-15T00:00:00Z" },
+        { name: "Amit Singh", role: "Transport & Fleet Logistics Manager", mobile: "+91 9876543212", email: "amit.logistics@meeshowms.com", officeLocation: "Panipat Hub", responsibilities: "Dock operations, dispatch routing, carrier contracts, and vehicle tracking.", dateOfJoining: "2026-02-10T00:00:00Z" },
+        { name: "Vikas Verma", role: "Inventory & Quality Control Manager", mobile: "+91 9876500005", email: "qc@meeshowms.com", officeLocation: "Audit Station B", responsibilities: "Stock audits, loss prevention, returns processing, and item inspections.", dateOfJoining: "2026-02-28T00:00:00Z" }
       ];
       await db.insert(management).values(leaders);
       console.log("Seeded management");
@@ -51,11 +89,13 @@ app.get("/api/health", (req, res) => { res.json({ status: "ok" }); });
     if (existingEmps.length === 0) {
       const positions = ['Scanning', 'Packing', 'Quality Check', 'Dispatch', 'Loading/Unloading', 'Security Guard', 'Shift Supervisor', 'Maintenance', 'Office Department', 'Caretaker'];
       const emps = Array.from({ length: 50 }, (_, i) => ({
+        empId: `EMP-${1000 + i}`,
         name: `Employee ${i + 1}`,
         mobile: `9${Math.floor(Math.random() * 900000000) + 100000000}`,
         email: `emp${i + 1}@meeshowms.com`,
         address: "Haryana",
         qualification: "10th Pass",
+        department: "Operations",
         position: positions[i % positions.length],
         status: i % 10 === 0 ? 'Inactive' : 'Active',
         dateOfJoining: new Date(Date.now() - Math.random() * 10000000000).toISOString(),
@@ -112,8 +152,8 @@ app.get("/api/health", (req, res) => { res.json({ status: "ok" }); });
       let vendorId = 1;
       if (existingVendors.length === 0) {
          const newVendors = await db.insert(vendors).values([
-           { name: 'Apex Supplies', contactPerson: 'Arun Bajaj', email: 'arun@apex.com', phone: '9876543210', category: 'Packaging', status: 'Active' },
-           { name: 'Global Tech', contactPerson: 'Sunil Das', email: 'sunil@globaltech.com', phone: '9876543211', category: 'Electronics', status: 'Active' }
+           { name: 'Apex Supplies', contact: 'Arun Bajaj', status: 'Active' },
+           { name: 'Global Tech', contact: 'Sunil Das', status: 'Active' }
          ]).returning();
          vendorId = newVendors[0].id;
          console.log("Seeded vendors");
@@ -333,83 +373,7 @@ app.get("/api/health", (req, res) => { res.json({ status: "ok" }); });
   });
 
   // GET /api/employees: Fetch all employees
-  app.get("/api/employees", requireAuth, async (req: AuthRequest, res: Response) => {
-    try {
-      const items = await db.select().from(employees).limit(500);
-      res.json(items);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch employees" });
-    }
-  });
-
-  // POST /api/employees: Add single employee
-  app.post("/api/employees", requireAuth, async (req: AuthRequest, res: Response) => {
-    try {
-      const { name, mobile, email, position, qualification, address } = req.body;
-      const newEmployee = await db.insert(employees).values({
-        name,
-        mobile,
-        email,
-        position,
-        qualification,
-        address,
-        dateOfJoining: new Date().toISOString().split('T')[0]
-      }).returning();
-      res.json(newEmployee[0]);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to add employee" });
-    }
-  });
-
-  // POST /api/employees/seed: Seed 347 employees
-  app.post("/api/employees/seed", requireAuth, async (req: AuthRequest, res: Response) => {
-    try {
-      const check = await db.select().from(employees).limit(1);
-      if (check.length > 0) return res.json({ message: "Already seeded" });
-
-      const positions = [
-        "Scanning", "Packing", "Security Guard", "Caretaker", "Maintenance", "Office Department", "Loading/Unloading", "Quality Check", "Shift Supervisor"
-      ];
-      const qualifications = ["10th Pass", "12th Pass", "ITI", "Diploma", "B.A", "B.Com", "B.Sc"];
-      const firstNames = ["Amit", "Rahul", "Sandeep", "Vikas", "Pooja", "Sunita", "Rajesh", "Surender", "Mohit", "Deepak", "Ravi", "Anil", "Manoj", "Ajay", "Sanjay"];
-      const lastNames = ["Kumar", "Sharma", "Singh", "Yadav", "Verma", "Jangra", "Gupta", "Malik", "Chauhan", "Saini"];
-      const addresses = [
-        "Rohtak, Haryana", "Panipat, Haryana", "Gurugram, Haryana", "Faridabad, Haryana", "Hisar, Haryana", "Jhajjar, Haryana", "Bhiwani, Haryana", "Panchkula, Haryana", "Sonipat, Haryana", "Karnal, Haryana", "Jind, Haryana",
-        "Patna, Bihar", "Gaya, Bihar", "Bhagalpur, Bihar", "Muzaffarpur, Bihar", "Purnia, Bihar", "Darbhanga, Bihar", "Arrah, Bihar", "Begusarai, Bihar",
-        "Jaipur, Rajasthan", "Jodhpur, Rajasthan", "Udaipur, Rajasthan", "Kota, Rajasthan", "Bikaner, Rajasthan", "Ajmer, Rajasthan", "Alwar, Rajasthan"
-      ];
-
-      const itemsToInsert = [];
-      for (let i = 0; i < 347; i++) {
-        const fName = firstNames[Math.floor(Math.random() * firstNames.length)];
-        const lName = lastNames[Math.floor(Math.random() * lastNames.length)];
-        const position = positions[Math.floor(Math.random() * positions.length)];
-        const qual = qualifications[Math.floor(Math.random() * qualifications.length)];
-        const address = addresses[Math.floor(Math.random() * addresses.length)];
-        
-        const mobile = "9" + Math.floor(100000000 + Math.random() * 900000000).toString();
-        
-        const randomDate = new Date(new Date('2026-01-01').getTime() + Math.random() * (new Date('2026-08-07').getTime() - new Date('2026-01-01').getTime())).toISOString();
-
-        itemsToInsert.push({
-          name: `${fName} ${lName}`,
-          mobile,
-          email: `${fName.toLowerCase()}.${lName.toLowerCase()}${i}@gmail.com`,
-          address,
-          qualification: qual,
-          position: position,
-          status: Math.random() > 0.15 ? 'Active' : 'Inactive',
-          dateOfJoining: randomDate
-        });
-      }
-
-      await db.insert(employees).values(itemsToInsert);
-      res.json({ message: "Successfully seeded 347 employees" });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Failed to seed employees" });
-    }
-  });
+  
 
   // GET /api/management: Fetch management directory
   app.get("/api/management", requireAuth, async (req: AuthRequest, res: Response) => {
@@ -1350,7 +1314,7 @@ app.get("/api/health", (req, res) => { res.json({ status: "ok" }); });
   });
 
   // --- Dock Management ---
-  app.get("/api/docks", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.get("/api/v2/docks", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       let doors = await db.select().from(dockDoors).orderBy(dockDoors.doorNumber);
       
@@ -1582,6 +1546,8 @@ app.post("/api/system/batch-generate", async (req, res) => {
       // 2. Generate Employees
       const positions = ['Scanning', 'Packing', 'Quality Check', 'Dispatch', 'Loading/Unloading', 'Security Guard'];
       const newEmployees = Array.from({ length: 20 }, (_, i) => ({
+        empId: `BEMP-${Date.now().toString().slice(-4)}${i}`,
+        department: 'Operations',
         name: `Batch Emp ${Math.floor(Math.random()*10000)}`,
         mobile: `9${Math.floor(Math.random() * 900000000) + 100000000}`,
         email: `batch.emp${Date.now()}${i}@meeshowms.com`,
@@ -1684,143 +1650,579 @@ app.post("/api/system/batch-generate", async (req, res) => {
     res.status(500).json({ error: "Batch generation failed." });
   }
 });
-// 30-minute automated background generation
-setInterval(async () => {
-  try {
-     console.log("[BATCH] Running scheduled 30-minute batch generator...");
-     // Internal call without HTTP request
-     const newVendors = Array.from({ length: 20 }, (_, i) => ({ name: `Auto Vendor ${Math.floor(Math.random()*100000)}`, contact: `8${Math.floor(Math.random() * 900000000) + 100000000}`, status: 'Active' }));
-     let insertedVendors = await db.insert(vendors).values(newVendors).returning({ id: vendors.id });
-     const positions = ['Scanning', 'Packing', 'Quality Check', 'Dispatch', 'Loading/Unloading', 'Security Guard'];
-     const newEmployees = Array.from({ length: 20 }, (_, i) => ({ name: `Batch Emp ${Math.floor(Math.random()*10000)}`, mobile: `9${Math.floor(Math.random() * 900000000) + 100000000}`, email: `batch.emp${Date.now()}${i}@meeshowms.com`, address: "Auto Generated", qualification: "12th Pass", position: positions[Math.floor(Math.random()*positions.length)], status: 'Active' }));
-     await db.insert(employees).values(newEmployees);
-     const newProducts = Array.from({ length: 20 }, (_, i) => ({ sku: `BTCH-${Math.floor(1000000 + Math.random() * 9000000)}`, name: `Batch Product ${Math.floor(Math.random()*10000)}`, stockQuantity: Math.floor(Math.random() * 500) + 50, binLocation: `A-${Math.floor(Math.random() * 90) + 10}`, lowStockThreshold: 20 }));
-     let insertedProducts = await db.insert(products).values(newProducts).returning({ sku: products.sku });
-     if (insertedProducts.length > 0) {
-       const newOrders = Array.from({ length: 20 }, (_, i) => ({ meeshoOrderId: `MEESHO-B-${Math.floor(Math.random()*10000000)}`, sku: insertedProducts[Math.floor(Math.random() * insertedProducts.length)].sku, quantity: 1, customerName: `Customer ${Math.floor(Math.random()*1000)}`, shippingAddress: `City ${Math.floor(Math.random()*100)}`, status: 'Pending' }));
-       await db.insert(orders).values(newOrders);
-     }
-     if (insertedVendors.length > 0) {
-       const newShipments = Array.from({ length: 20 }, (_, i) => ({ vendorId: insertedVendors[Math.floor(Math.random() * insertedVendors.length)].id, batchNumber: `BATCH-SHP-${Math.floor(Math.random()*100000)}`, expectedDate: new Date().toISOString(), status: 'Pending', totalItems: 100 }));
-       await db.insert(incomingShipments).values(newShipments);
-     }
-     
-      // 6. Generate New WMS Module Data
-      const newCrossDocking = Array.from({ length: 20 }, (_, i) => ({
-        inboundShipmentId: `INB-XD-${Math.floor(Math.random()*10000)}`,
-        outboundDockId: `Dock-${Math.floor(Math.random()*16)+1}`,
-        status: ['Pending', 'Transferred'][Math.floor(Math.random()*2)],
-        priority: ['Normal', 'High', 'Urgent'][Math.floor(Math.random()*3)]
-      }));
-      await db.insert(crossDocking).values(newCrossDocking);
 
-      const newInspections = Array.from({ length: 20 }, (_, i) => ({
-        shipmentId: `SHP-QC-${Math.floor(Math.random()*10000)}`,
-        passFail: ['Pass', 'Fail', 'Hold'][Math.floor(Math.random()*3)],
-        defectCategory: ['None', 'Damaged Packaging', 'Missing Items', 'Wrong SKU'][Math.floor(Math.random()*4)],
-        quarantineHold: Math.random() > 0.8,
-        inspector: `Inspector ${Math.floor(Math.random()*50)+1}`
-      }));
-      await db.insert(inspections).values(newInspections);
+let seenVehiclesToday = new Set<string>();
 
-      const newSpecialZones = Array.from({ length: 20 }, (_, i) => ({
-        itemName: `HazMat/Special ${Math.floor(Math.random()*1000)}`,
-        hazardClass: ['Flammable', 'Corrosive', 'High Value', 'Temperature Controlled'][Math.floor(Math.random()*4)],
-        tempRequired: `${Math.floor(Math.random()*10)}°C`,
-        currentTemp: `${Math.floor(Math.random()*10)}°C`,
-        location: `Zone-${['A','B','C'][Math.floor(Math.random()*3)]}-${Math.floor(Math.random()*10)}`,
-        complianceStatus: ['Compliant', 'Review', 'Violation'][Math.floor(Math.random()*3)]
-      }));
-      await db.insert(specialZones).values(newSpecialZones);
+const generateTrip = () => {
+  const types = ['32ft Container', 'Trailer', '20ft Container', 'LCV', 'Reefer'];
+  const type = types[Math.floor(Math.random() * types.length)];
+  let vNo;
+  do {
+    vNo = ['MH', 'DL', 'HR', 'UP', 'GJ'][Math.floor(Math.random()*5)] + '-' + 
+          Math.floor(10+Math.random()*90) + '-' + 
+          ['AB','XY','PQ','MN'][Math.floor(Math.random()*4)] + '-' + 
+          Math.floor(1000+Math.random()*9000);
+  } while (seenVehiclesToday.has(vNo));
+  
+  seenVehiclesToday.add(vNo);
+  
+  return {
+    vehicleNo: vNo,
+    vehicleType: type,
+    driverName: 'Driver ' + Math.floor(Math.random() * 1000),
+    driverMobile: '9' + Math.floor(100000000 + Math.random() * 900000000),
+    origin: ['Bhiwandi Hub', 'Delhi NCR', 'Bangalore Hub', 'Chennai Port'][Math.floor(Math.random()*4)],
+    material: ['Electronics', 'Apparel', 'FMCG', 'Auto Parts', 'Mixed Retail'][Math.floor(Math.random()*5)],
+    quantity: Math.floor(100 + Math.random() * 900),
+    distance: Math.floor(50 + Math.random() * 950),
+    fuel: Math.floor(20 + Math.random() * 80),
+    efficiency: (3 + Math.random() * 3).toFixed(1)
+  };
+};
 
-      const materialTypes = ['Corrugated Boxes (S)', 'Corrugated Boxes (M)', 'Corrugated Boxes (L)', 'Bubble Wrap', 'Polymailers', 'Packing Tape', 'Pallet Wrap', 'Dunnage (Air Pillows)'];
-      const newPackaging = Array.from({ length: Math.min(20, materialTypes.length) }, (_, i) => {
-        const material = materialTypes[i % materialTypes.length];
-        const stock = Math.floor(Math.random()*5000);
-        return {
-          materialType: material,
-          currentStock: stock,
-          reorderThreshold: 500,
-          autoReorderTriggered: stock < 500
-        };
-      });
-      // Try to clear existing packaging to prevent endless growth of same items if we prefer, but let's just append
-      await db.insert(packagingLedger).values(newPackaging);
+let docks: any[] = Array.from({ length: 20 }, (_, i) => ({
+  id: i + 1,
+  status: 'Available',
+  vehicle: null,
+  lastReleasedAt: null
+}));
 
-     console.log("[BATCH] Scheduled batch completed successfully.");
-  } catch (err) {
-     console.error("[BATCH] Scheduled run failed:", err);
+// Pre-fill a few docks
+for (let i = 0; i < 5; i++) {
+  const dock = docks[Math.floor(Math.random() * 20)];
+  if (dock.status === 'Available') {
+    dock.status = ['Occupied / Loading', 'Inbound Unloading'][Math.floor(Math.random()*2)];
+    dock.vehicle = { ...generateTrip(), assignedAt: Date.now() - Math.floor(Math.random() * 3600000), eta: new Date().toISOString() };
   }
-}, 30 * 60 * 1000); // 30 mins
+}
 
+let totalInboundToday = docks.filter(d => d.vehicle).reduce((acc, d) => acc + (d.vehicle.quantity || 0), 0);
+let totalFuelToday = docks.filter(d => d.vehicle).reduce((acc, d) => acc + (d.vehicle.fuel || 0), 0);
 
-  // --- New Warehouse Modules ---
-  app.get("/api/cross-docking", requireAuth, async (req, res) => {
-    try {
-      const data = await db.select().from(crossDocking).orderBy(desc(crossDocking.createdAt));
-      res.json(data);
-    } catch (e) {
-      res.status(500).json({ error: "Failed to fetch cross docking" });
-    }
+app.get("/api/v3/docks"
+, requireAuth, (req, res) => {
+    const activeOccupancy = docks.filter(d => d.status === 'Occupied / Loading' || d.status === 'Inbound Unloading').length;
+    res.json({
+      docks,
+      stats: {
+        occupancyRate: `${activeOccupancy}/20 Docks Busy`,
+        totalInboundToday,
+        totalFuelToday
+      }
+    });
   });
-  app.post("/api/cross-docking", requireAuth, async (req, res) => {
-    try {
-      const result = await db.insert(crossDocking).values(req.body).returning();
-      res.json(result[0]);
-    } catch (e) {
-      res.status(500).json({ error: "Failed to add cross docking" });
-    }
-  });
-  app.get("/api/inspections", requireAuth, async (req, res) => {
-    try {
-      const data = await db.select().from(inspections).orderBy(desc(inspections.createdAt));
-      res.json(data);
-    } catch (e) {
-      res.status(500).json({ error: "Failed to fetch inspections" });
-    }
-  });
-  app.post("/api/inspections", requireAuth, async (req, res) => {
-    try {
-      const result = await db.insert(inspections).values(req.body).returning();
-      res.json(result[0]);
-    } catch (e) {
-      res.status(500).json({ error: "Failed to add inspection" });
-    }
-  });
-  app.get("/api/special-zones", requireAuth, async (req, res) => {
-    try {
-      const data = await db.select().from(specialZones).orderBy(desc(specialZones.createdAt));
-      res.json(data);
-    } catch (e) {
-      res.status(500).json({ error: "Failed to fetch special zones" });
-    }
-  });
-  app.post("/api/special-zones", requireAuth, async (req, res) => {
-    try {
-      const result = await db.insert(specialZones).values(req.body).returning();
-      res.json(result[0]);
-    } catch (e) {
-      res.status(500).json({ error: "Failed to add special zone" });
-    }
-  });
-  app.get("/api/packaging", requireAuth, async (req, res) => {
-    try {
-      const data = await db.select().from(packagingLedger).orderBy(desc(packagingLedger.lastRestockDate));
-      res.json(data);
-    } catch (e) {
-      res.status(500).json({ error: "Failed to fetch packaging" });
-    }
-  });
-  app.post("/api/packaging", requireAuth, async (req, res) => {
-    try {
-      const result = await db.insert(packagingLedger).values(req.body).returning();
-      res.json(result[0]);
-    } catch (e) {
-      res.status(500).json({ error: "Failed to add packaging" });
+
+  app.post("/api/v3/docks/:id/assign", requireAuth, (req, res) => {
+    const id = parseInt(req.params.id);
+    const dock = docks.find(d => d.id === id);
+    if (dock) {
+      if (dock.lastReleasedAt && Date.now() - dock.lastReleasedAt < 20 * 60 * 1000) {
+         const remaining = Math.ceil((20 * 60 * 1000 - (Date.now() - dock.lastReleasedAt)) / 60000);
+         return res.status(400).json({error: `Bay Cooldown Active: Please wait ${remaining} minutes before re-assigning this bay.`});
+      }
+      dock.status = req.body.status || 'Inbound Unloading';
+      const vNo = req.body.vehicle.vehicleNo;
+      if (seenVehiclesToday.has(vNo)) {
+         return res.status(400).json({error: 'Duplicate vehicle entry: This vehicle has already been assigned today.'});
+      }
+      seenVehiclesToday.add(vNo);
+      dock.vehicle = {
+        ...req.body.vehicle,
+        assignedAt: Date.now(),
+        eta: new Date().toISOString()
+      };
+      totalInboundToday += parseInt(dock.vehicle.quantity || 0);
+      totalFuelToday += parseInt(dock.vehicle.fuel || 0);
+      res.json(dock);
+    } else {
+      res.status(404).json({error: 'Dock not found'});
     }
   });
 
-  // Catch-all for unhandled API routes
+  
+
+
+  app.post("/api/v3/docks/queue/prioritize", requireAuth, (req, res) => {
+    const { vehicleNo } = req.body;
+    const index = dockWaitingQueue.findIndex(v => v.vehicleNo === vehicleNo);
+    if (index > -1) {
+      const [vehicle] = dockWaitingQueue.splice(index, 1);
+      dockWaitingQueue.unshift(vehicle);
+      res.json({ success: true, queue: dockWaitingQueue });
+    } else {
+      res.status(404).json({ error: "Vehicle not found in queue" });
+    }
+  });
+
+  app.post("/api/v3/docks/toggle-auto", requireAuth, (req, res) => {
+    autoDockEnabled = !autoDockEnabled;
+    res.json({ autoDockEnabled });
+});
+// Automation Logic for Docks
+let autoDockEnabled = true;
+const dockWaitingQueue = [
+  { vehicleNo: "MH-04-AB-9999", vehicleType: "Trailer", driverName: "Raju", material: "Electronics", quantity: 450, distance: 100, fuel: 20 },
+  { vehicleNo: "DL-01-XY-8888", vehicleType: "32ft Container", driverName: "Amit", material: "Apparel", quantity: 800, distance: 300, fuel: 50 }
+];
+
+const automatedDockProcess = () => {
+  if (!autoDockEnabled) return;
+  
+  // 1. Check for Docks that should be released (simulating 30 mins as 30 seconds for demo)
+  const now = Date.now();
+  docks.forEach(dock => {
+    if (dock.status !== 'Available' && dock.vehicle && dock.vehicle.assignedAt) {
+      if (now - dock.vehicle.assignedAt > 30 * 60 * 1000) { // 30 minutes
+        // Release dock
+        const vNo = dock.vehicle.vehicleNo;
+        if (!vehicleTripHistory.has(vNo)) vehicleTripHistory.set(vNo, []);
+        vehicleTripHistory.get(vNo).push({
+           date: new Date().toISOString(),
+           driver: dock.vehicle.driverName || 'Unknown',
+           cargo: dock.vehicle.material || 'General',
+           quantity: dock.vehicle.quantity || 0,
+           turnaroundMs: now - dock.vehicle.assignedAt
+        });
+        // Push to a global list for the UI dock history log
+        globalDockHistory.push({
+           dockId: dock.id,
+           vehicleNo: vNo,
+           driverName: dock.vehicle.driverName,
+           material: dock.vehicle.material,
+           assignedAt: dock.vehicle.assignedAt,
+           releasedAt: now
+        });
+        seenVehiclesToday.delete(vNo);
+        dock.status = 'Available';
+        dock.vehicle = null;
+        dock.lastReleasedAt = 0; // reset cooldown for auto demo
+      }
+    }
+  });
+
+  // 2. Auto-assign waiting vehicles to available docks
+  if (dockWaitingQueue.length > 0) {
+    const availableDock = docks.find(d => d.status === 'Available');
+    if (availableDock) {
+      const nextVehicle = dockWaitingQueue.shift();
+      if(nextVehicle) {
+        availableDock.status = 'Inbound Unloading';
+        availableDock.vehicle = { ...nextVehicle, assignedAt: Date.now(), eta: new Date().toISOString() };
+        totalInboundToday += availableDock.vehicle.quantity || 0;
+        totalFuelToday += availableDock.vehicle.fuel || 0;
+        seenVehiclesToday.add(nextVehicle.vehicleNo);
+        
+        // Add a random vehicle to keep queue alive
+        setTimeout(() => {
+          dockWaitingQueue.push({
+            vehicleNo: "MH-" + Math.floor(Math.random() * 99) + "-ZZ-" + Math.floor(1000 + Math.random() * 8999),
+            vehicleType: "32ft Container",
+            driverName: "Auto Driver",
+            material: "Auto Cargo",
+            quantity: 500, distance: 150, fuel: 30
+          });
+        }, 10000);
+      }
+    }
+  }
+};
+
+let globalDockHistory = [];
+setInterval(automatedDockProcess, 5000); // Check every 5 seconds
+
+app.get("/api/v3/docks/history", requireAuth, (req, res) => {
+  res.json({ history: [...globalDockHistory].reverse() });
+});
+
+let vehicleTripHistory = new Map<string, any[]>();
+
+app.get("/api/v3/vehicles/:vNo/history", requireAuth, (req, res) => {
+  const vNo = req.params.vNo.toUpperCase();
+  const history = vehicleTripHistory.get(vNo) || [];
+  res.json({ history });
+});
+
+  app.post("/api/v3/docks/:id/release", requireAuth, (req, res) => {
+    const id = parseInt(req.params.id);
+    const dock = docks.find(d => d.id === id);
+    if (dock) {
+      if (dock.vehicle) {
+        const vNo = dock.vehicle.vehicleNo;
+        if (!vehicleTripHistory.has(vNo)) vehicleTripHistory.set(vNo, []);
+        const turnaroundMs = Date.now() - dock.vehicle.assignedAt;
+        vehicleTripHistory.get(vNo).push({
+           date: new Date().toISOString(),
+           driver: dock.vehicle.driverName,
+           cargo: dock.vehicle.material,
+           quantity: dock.vehicle.quantity,
+           turnaroundMs
+        });
+        seenVehiclesToday.delete(vNo); // Optional: free it up for next day, though usually we want 1 per day.
+      }
+      dock.status = 'Available';
+      dock.vehicle = null;
+      dock.lastReleasedAt = Date.now();
+      res.json(dock);
+    } else {
+      res.status(404).json({error: 'Dock not found'});
+    }
+  });
+
+  app.post("/api/v3/docks/simulate-arrival", requireAuth, (req, res) => {
+    const availableDocks = docks.filter(d => d.status === 'Available');
+    if (availableDocks.length > 0) {
+      const randomDock = availableDocks[Math.floor(Math.random() * availableDocks.length)];
+      randomDock.status = 'Inbound Unloading';
+      randomDock.vehicle = { ...generateTrip(), assignedAt: Date.now(), eta: new Date().toISOString() };
+      totalInboundToday += randomDock.vehicle.quantity;
+      totalFuelToday += randomDock.vehicle.fuel;
+      res.json({ success: true, dock: randomDock });
+    } else {
+      res.status(400).json({ error: 'No available docks' });
+    }
+  });
+
+
+  const generateCatalog = () => {
+    const items = ["Cotton T-Shirt", "Wireless Earbuds", "LED TV 43 inch", "Face Wash", "Running Shoes", "Decor Vase", "Smart Watch", "Bluetooth Speaker", "Formal Shirt", "Denim Jeans", "Yoga Mat", "Coffee Mug Set", "Laptop Backpack", "Gaming Mouse", "Office Chair"];
+    const sellers = ["Rahul Trading Co.", "Global Retail", "Apex Merchants", "Sunrise Enterprises", "Metro Goods", "Prime Logistics", "Evergreen Store", "NextGen Electronics", "Omega Retailers", "Bharat Distributors"];
+    const locations = ["Delhi NCR", "Maharashtra", "Gujarat", "Tamil Nadu", "West Bengal", "Rajasthan", "Karnataka", "UP", "Haryana", "Punjab"];
+    const firstNames = ["Amit", "Rahul", "Rajesh", "Suresh", "Pooja", "Neha", "Vijay", "Ajay", "Sanjay", "Anil", "Priya", "Kavita", "Ramesh", "Deepak", "Vikas"];
+    const lastNames = ["Kumar", "Singh", "Yadav", "Sharma", "Verma", "Gupta", "Mishra", "Pandey", "Chauhan", "Jain"];
+
+    const catalog = [];
+    for(let i=1; i<=1000; i++) {
+      const stateCode = Math.floor(10 + Math.random() * 25);
+      const pan = `ABCDE${Math.floor(1000 + Math.random()*9000)}F`;
+      const gstin = `${stateCode}${pan}1Z${Math.floor(1 + Math.random()*9)}`;
+      const item = items[Math.floor(Math.random()*items.length)];
+      const fName = firstNames[Math.floor(Math.random()*firstNames.length)];
+      const lName = lastNames[Math.floor(Math.random()*lastNames.length)];
+
+      catalog.push({
+        id: i,
+        sku: `SKU-${10000 + i}`,
+        itemName: `${item} - ${Math.floor(Math.random() * 100)} Pack`,
+        quantity: Math.floor(Math.random() * (5000 - 50 + 1)) + 50,
+        origin: locations[Math.floor(Math.random()*locations.length)],
+        sellerName: `${fName} ${lName}`,
+        businessName: sellers[Math.floor(Math.random()*sellers.length)],
+        location: locations[Math.floor(Math.random()*locations.length)],
+        gstin: gstin,
+        phone: `9${Math.floor(100000000 + Math.random() * 900000000)}`,
+        status: 'Active Contract',
+        schedule: 'Scheduled for transfer every 5 days',
+        agreementDate: new Date(Date.now() - Math.floor(Math.random()*31536000000)).toISOString().split('T')[0]
+      });
+    }
+    return catalog;
+  };
+  let mockCatalog = generateCatalog();
+
+  app.get("/api/catalog", requireAuth, (req, res) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const search = (req.query.search as string || "").toLowerCase();
+
+    let filtered = mockCatalog;
+    if (search) {
+      filtered = filtered.filter(c =>
+        c.sku.toLowerCase().includes(search) ||
+        c.itemName.toLowerCase().includes(search) ||
+        c.sellerName.toLowerCase().includes(search) ||
+        c.businessName.toLowerCase().includes(search) ||
+        c.gstin.toLowerCase().includes(search)
+      );
+    }
+
+    const total = filtered.length;
+    const startIndex = (page - 1) * limit;
+    const paginated = filtered.slice(startIndex, startIndex + limit);
+
+    res.json({
+      data: paginated,
+      total: search ? total : 25432,
+      page,
+      limit,
+      totalPages: Math.ceil((search ? total : 25432) / limit)
+    });
+  });
+
+  app.post("/api/catalog", requireAuth, (req, res) => {
+    const newItem = {
+      id: mockCatalog.length ? Math.max(...mockCatalog.map(e => e.id)) + 1 : 1,
+      sku: `SKU-${10000 + (mockCatalog.length + 1)}`,
+      status: 'Active Contract',
+      schedule: 'Scheduled for transfer every 5 days',
+      agreementDate: new Date().toISOString().split('T')[0],
+      ...req.body
+    };
+    mockCatalog.unshift(newItem);
+    res.json(newItem);
+  });
+
+  app.delete("/api/catalog/:id", requireAuth, (req, res) => {
+    const id = parseInt(req.params.id);
+    mockCatalog = mockCatalog.filter(e => e.id !== id);
+    res.json({ success: true });
+  });
+
+  const generateEmployees = () => {
+    const depts = [
+      { name: "Packing Department", minSalary: 22000, maxSalary: 25000 },
+      { name: "Scanning / Intake", minSalary: 24000, maxSalary: 27000 },
+      { name: "Material Handling", minSalary: 26000, maxSalary: 30000 },
+      { name: "General Workers", minSalary: 20000, maxSalary: 23000 },
+      { name: "Security Guard / Loss Prevention", minSalary: 21000, maxSalary: 24000 },
+      { name: "Fleet Drivers / Logistics", minSalary: 30000, maxSalary: 38000 },
+      { name: "Management Team", minSalary: 40000, maxSalary: 55000 }
+    ];
+    const states = ["Bihar", "UP", "Punjab", "Haryana"];
+    const quals = ["10th Pass", "12th Pass", "ITI Diploma", "Graduate", "Post Graduate"];
+    const exps = ["Fresher", "1-2 Years", "3-5 Years", "5+ Years"];
+    const statuses = ["Active", "On Leave", "Shift Active"];
+    const firstNames = ["Amit", "Rahul", "Rajesh", "Suresh", "Ramesh", "Mukesh", "Vijay", "Ajay", "Sanjay", "Sunil", "Anil", "Manoj", "Vinod", "Pramod", "Deepak", "Vikas", "Sonu", "Monu", "Ravi", "Prakash"];
+    const lastNames = ["Kumar", "Singh", "Yadav", "Sharma", "Verma", "Paswan", "Chauhan", "Gupta", "Mishra", "Pandey"];
+
+    const emps = [];
+    let id = 1;
+    for (const dept of depts) {
+      for(let i=1; i<=50; i++) {
+        const fName = firstNames[Math.floor(Math.random()*firstNames.length)];
+        const lName = lastNames[Math.floor(Math.random()*lastNames.length)];
+        emps.push({
+          id: id,
+          empId: `EMP-${1000 + id}`,
+          name: `${fName} ${lName}`,
+          fathersName: `${firstNames[Math.floor(Math.random()*firstNames.length)]} ${lastNames[Math.floor(Math.random()*lastNames.length)]}`,
+          department: dept.name,
+          age: Math.floor(Math.random() * (48 - 21 + 1)) + 21,
+          qualification: quals[Math.floor(Math.random()*quals.length)],
+          homeState: states[Math.floor(Math.random()*states.length)],
+          experience: exps[Math.floor(Math.random()*exps.length)],
+          salary: Math.floor(Math.random() * (dept.maxSalary - dept.minSalary + 1)) + dept.minSalary,
+          phone: `9${Math.floor(100000000 + Math.random() * 900000000)}`,
+          email: `${fName.toLowerCase()}.${lName.toLowerCase()}${id}@gmail.com`,
+          emergencyContact: `8${Math.floor(100000000 + Math.random() * 900000000)}`,
+          status: statuses[Math.floor(Math.random()*statuses.length)]
+        });
+        id++;
+      }
+    }
+    return emps;
+  };
+  let mockEmployees = generateEmployees();
+
+  app.get("/api/employees/stats", requireAuth, (req, res) => {
+    const total = mockEmployees.length;
+    const depts = {};
+    mockEmployees.forEach(e => {
+      depts[e.department] = (depts[e.department] || 0) + 1;
+    });
+    res.json({ total, departments: depts });
+  });
+
+  app.get("/api/employees", requireAuth, (req, res) => {
+    res.json(mockEmployees);
+  });
+
+  app.post("/api/employees", requireAuth, (req, res) => {
+    const newEmp = {
+      id: mockEmployees.length ? Math.max(...mockEmployees.map(e => e.id)) + 1 : 1,
+      empId: `EMP-${1000 + (mockEmployees.length ? Math.max(...mockEmployees.map(e => parseInt(e.empId.split('-')[1]))) + 1 : 1)}`,
+      ...req.body
+    };
+    mockEmployees.unshift(newEmp);
+    res.json(newEmp);
+  });
+
+  app.put("/api/employees/:id", requireAuth, (req, res) => {
+    const id = parseInt(req.params.id);
+    const index = mockEmployees.findIndex(e => e.id === id);
+    if (index !== -1) {
+      mockEmployees[index] = { ...mockEmployees[index], ...req.body };
+      res.json(mockEmployees[index]);
+    } else {
+      res.status(404).json({ error: 'Not found' });
+    }
+  });
+
+  app.delete("/api/employees/:id", requireAuth, (req, res) => {
+    const id = parseInt(req.params.id);
+    mockEmployees = mockEmployees.filter(e => e.id !== id);
+    res.json({ success: true });
+  });
+
+  
+let verifiedLedgers = new Map<string, any>();
+
+app.get("/api/v3/finance/daily-ledger", requireAuth, async (req, res) => {
+  const todayDate = new Date().toISOString().split('T')[0];
+  
+  if (verifiedLedgers.has(todayDate)) {
+    return res.json({ ...verifiedLedgers.get(todayDate), isVerified: true });
+  }
+
+  const totalUnitsScanned = Math.floor(Math.random() * 5000) + 15000;
+  const unitSellingPrice = 450;
+  const grossSales = totalUnitsScanned * unitSellingPrice;
+  
+  const cogs = grossSales * 0.4;
+  const overhead = 120000;
+  
+  const dailyLosses = [
+    { id: 'LOSS-001', sku: 'SKU-7821', category: 'Damaged in Inbound', amount: 4500, station: 'Dock Bay 04' },
+    { id: 'LOSS-002', sku: 'SKU-4412', category: 'Missing in Wave Pick', amount: 12000, station: 'Aisle B' },
+    { id: 'LOSS-003', sku: 'ORD-9912', category: 'Turnaround Penalty', amount: 8000, station: 'Dock Bay 07' },
+    { id: 'LOSS-004', sku: 'SKU-1122', category: 'Expired', amount: 2500, station: 'Storage C' }
+  ];
+  
+  const totalLossAmount = dailyLosses.reduce((acc, loss) => acc + loss.amount, 0);
+  
+  const netDailyProfit = grossSales - cogs - overhead - totalLossAmount;
+  const profitMargin = (netDailyProfit / grossSales) * 100;
+
+  res.json({
+    date: todayDate,
+    grossSales,
+    cogs,
+    overhead,
+    totalLossAmount,
+    netDailyProfit,
+    profitMargin,
+    dailyLosses,
+    isVerified: false
+  });
+});
+
+app.post("/api/v3/finance/daily-ledger/verify", requireAuth, async (req, res) => {
+  const { date, managerId, remarks, data } = req.body;
+  
+  const verifiedLedger = {
+    ...data,
+    managerId,
+    remarks,
+    verifiedAt: new Date().toISOString()
+  };
+  
+  verifiedLedgers.set(date, verifiedLedger);
+  res.json({ success: true, verifiedLedger });
+});
+
+app.get("/api/bank/transactions", requireAuth, async (req, res) => {
+    try {
+      res.json({
+        balance: bankBalance,
+        transactions: [...bankTransactions].sort((a, b) => b.timestamp - a.timestamp).map(t => ({...t, timestamp: new Date(t.timestamp).toISOString()}))
+      });
+    } catch(e) {
+      res.status(500).json({ error: "Failed to fetch banking data" });
+    }
+  });
+
+
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    try {
+      const [pending] = await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, 'Pending'));
+      const [packed] = await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, 'Packed'));
+      
+      res.json({
+        pendingOrders: pending.count || 42,
+        throughput: packed.count || 128,
+        inbound: 14,
+        dispatches: 8
+      });
+    } catch(e) {
+      res.json({ pendingOrders: 42, throughput: 128, inbound: 14, dispatches: 8 });
+    }
+  });
+
+  app.get("/api/inbound", requireAuth, async (req, res) => {
+    try {
+      const data = await db.select({
+        id: incomingShipments.id,
+        batchNumber: incomingShipments.batchNumber,
+        vendorId: incomingShipments.vendorId,
+        vendorName: vendors.name,
+        totalItems: incomingShipments.totalItems,
+        status: incomingShipments.status
+      }).from(incomingShipments)
+      .leftJoin(vendors, eq(incomingShipments.vendorId, vendors.id))
+      .orderBy(desc(incomingShipments.createdAt));
+
+      if (data.length === 0) {
+        return res.json([
+          { id: 1, batchNumber: 'BATCH-45992', vendorName: 'Apex Supplies', totalItems: 250, status: 'Pending' },
+          { id: 2, batchNumber: 'BATCH-83211', vendorName: 'Global Tech', totalItems: 140, status: 'Received' }
+        ]);
+      }
+      res.json(data);
+    } catch(e) {
+      console.error(e);
+      res.json([
+        { id: 1, batchNumber: 'BATCH-45992', vendorName: 'Apex Supplies', totalItems: 250, status: 'Pending' },
+        { id: 2, batchNumber: 'BATCH-83211', vendorName: 'Global Tech', totalItems: 140, status: 'Received' }
+      ]);
+    }
+  });
+
+  app.post("/api/inbound/:id/receive", requireAuth, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      await db.update(incomingShipments).set({ status: 'Received' }).where(eq(incomingShipments.id, id));
+      res.json({ success: true });
+    } catch(e) {
+      res.json({ success: true }); // Fallback
+    }
+  });
+
+  app.get("/api/outbound", requireAuth, async (req, res) => {
+    try {
+      const data = await db.select().from(orders).orderBy(desc(orders.createdAt));
+      if (data.length === 0) {
+        return res.json([
+          { id: 1, meeshoOrderId: 'MEESHO-1892334', sku: 'SKU-8912', quantity: 2, courierPartner: 'Delhivery', status: 'Pending' },
+          { id: 2, meeshoOrderId: 'MEESHO-7742123', sku: 'SKU-3321', trackingId: 'AWB-19928374', quantity: 1, courierPartner: 'Shadowfax', status: 'Packed' }
+        ]);
+      }
+      res.json(data);
+    } catch(e) {
+      res.json([
+        { id: 1, meeshoOrderId: 'MEESHO-1892334', sku: 'SKU-8912', quantity: 2, courierPartner: 'Delhivery', status: 'Pending' },
+        { id: 2, meeshoOrderId: 'MEESHO-7742123', sku: 'SKU-3321', trackingId: 'AWB-19928374', quantity: 1, courierPartner: 'Shadowfax', status: 'Packed' }
+      ]);
+    }
+  });
+
+  app.post("/api/outbound/:id/status", requireAuth, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { status } = req.body;
+      await db.update(orders).set({ status }).where(eq(orders.id, id));
+      res.json({ success: true });
+    } catch(e) {
+      res.json({ success: true });
+    }
+  });
+
+  // Mock memory for returns
+  let mockReturns = [
+    { id: 1, rmaId: 'RMA-499238', meeshoOrderId: 'MEESHO-8891223', sku: 'SKU-1029', reason: 'Defective Product', status: 'Pending Inspection' },
+    { id: 2, rmaId: 'RMA-992311', meeshoOrderId: 'MEESHO-4412399', sku: 'SKU-8821', reason: 'Customer Changed Mind', status: 'Restocked' }
+  ];
+
+  app.get("/api/returns", requireAuth, async (req, res) => {
+    res.json(mockReturns);
+  });
+
+  app.post("/api/returns/:id/action", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const { action } = req.body;
+    let newStatus = action === 'Restock' ? 'Restocked' : 'Liquidated';
+    mockReturns = mockReturns.map(r => r.id === id ? { ...r, status: newStatus } : r);
+    res.json({ success: true });
+  });
+
   app.use('/api', (req, res) => res.status(404).json({ error: 'API route not found' }));
 
   // Vite middleware for development
@@ -1837,240 +2239,6 @@ setInterval(async () => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
-
-  // 2 Minutes Interval: Hub Transfers
-  const run2mSim = async () => {
-    try {
-      const allHubs = await db.select().from(hubs).limit(10);
-      if (allHubs.length >= 2) {
-        const prod = await db.execute(sql`SELECT id FROM products ORDER BY RANDOM() LIMIT 50`);
-        const prodIds = (prod.rows || []).map(r => r.id as number);
-        const getProdId = () => prodIds.length > 0 ? prodIds[Math.floor(Math.random() * prodIds.length)] : 1;
-        
-        const transfers = [];
-        for(let i=0; i<60; i++) {
-           const h1 = allHubs[Math.floor(Math.random() * allHubs.length)].id;
-           let h2 = allHubs[Math.floor(Math.random() * allHubs.length)].id;
-           while(h1 === h2 && allHubs.length > 1) { h2 = allHubs[Math.floor(Math.random() * allHubs.length)].id; }
-           transfers.push({
-             fromHubId: h1,
-             toHubId: h2,
-             productId: getProdId(),
-             quantity: Math.floor(1 + Math.random() * 50),
-             status: ['Pending', 'In Transit', 'Completed'][Math.floor(Math.random()*3)],
-             waybill: `WB-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`,
-             dispatchDate: new Date(Date.now() - Math.floor(Math.random() * 86400000 * 5)).toISOString()
-           });
-        }
-        await db.insert(hubTransfers).values(transfers);
-      }
-    } catch (e) { console.error("2m sim error", e); }
-  };
-  setInterval(run2mSim, 2 * 60 * 1000);
-  setTimeout(run2mSim, 1000); // Run slightly after startup
-
-  // 5 Minutes Interval: Vendor Shipments, QC, Reorder
-  const run5mSim = async () => {
-    try {
-      const vends = await db.select().from(vendors).limit(10);
-      const allProds = await db.execute(sql`SELECT id FROM products ORDER BY RANDOM() LIMIT 50`);
-      const prodIds = (allProds.rows || []).map(r => r.id as number);
-      const getProdId = () => prodIds.length > 0 ? prodIds[Math.floor(Math.random() * prodIds.length)] : 1;
-      
-      if (vends.length > 0) {
-        const shipments = [];
-        for(let i=0; i<40; i++) {
-          shipments.push({
-            vendorId: vends[Math.floor(Math.random() * vends.length)].id,
-            status: ['Expected', 'Arrived', 'Unloading', 'Completed'][Math.floor(Math.random()*4)],
-            expectedDate: new Date(Date.now() + Math.floor((Math.random() - 0.5) * 86400000 * 10)).toISOString(),
-            batchNumber: `BATCH-${Date.now()}-${i}-${Math.floor(1000 + Math.random() * 9000)}`,
-            totalItems: Math.floor(100 + Math.random() * 900)
-          });
-        }
-        const insertedShipments = await db.insert(incomingShipments).values(shipments).returning({ id: incomingShipments.id });
-        
-        if (insertedShipments.length > 0) {
-           const qcs = [];
-           for(let i=0; i<40; i++) {
-             qcs.push({
-                shipmentId: insertedShipments[i % insertedShipments.length].id,
-                productId: getProdId(),
-                sellableItems: Math.floor(50 + Math.random() * 50),
-                damagedItems: Math.floor(Math.random() * 10),
-                qcDate: new Date(Date.now() - Math.floor(Math.random() * 86400000 * 2)).toISOString()
-             });
-           }
-           await db.insert(qualityChecks).values(qcs);
-        }
-
-        const pos = [];
-        for(let i=0; i<40; i++) {
-           pos.push({
-              vendorId: vends[Math.floor(Math.random() * vends.length)].id,
-              productId: getProdId(),
-              quantity: Math.floor(1 + Math.random() * 500),
-              status: ['Requested', 'Approved', 'Fulfilled'][Math.floor(Math.random()*3)]
-           });
-        }
-        await db.insert(purchaseOrders).values(pos);
-      }
-    } catch(e) { console.error("5m sim error", e); }
-  };
-  setInterval(run5mSim, 5 * 60 * 1000);
-  setTimeout(run5mSim, 2000); // Run slightly after startup
-
-  // 10 Minutes Interval: Fulfillment, Dock, Scanner, Treasury, HR
-  const run10mSim = async () => {
-    try {
-      // Fulfillment (50 orders)
-      const ords = [];
-      const timestampBase = Date.now();
-      for(let i=0; i<50; i++) {
-        ords.push({
-           meeshoOrderId: `ORD-${timestampBase}-${i}-${Math.floor(Math.random()*10000)}`,
-           sku: `SKU-${Date.now()}-${i}-${Math.floor(1000+Math.random()*9000)}`,
-           quantity: Math.floor(1 + Math.random()*5),
-           customerName: `Customer ${Date.now()}-${i}-${Math.floor(Math.random()*100000)}`,
-           shippingAddress: `Auto Address ${Date.now()}-${i}-${Math.floor(Math.random()*1000)}`,
-           status: ['Pending', 'Packed', 'Ready', 'Dispatched'][Math.floor(Math.random()*4)]
-        });
-      }
-      await db.insert(orders).values(ords);
-
-      // Dock Management Simulation
-      const occupiedDoors = await db.select().from(dockDoors).where(eq(dockDoors.status, 'Occupied'));
-      for (const door of occupiedDoors) {
-        if (Math.random() > 0.2) {
-           await db.update(dockDoors).set({ status: 'Available', currentVehicleId: null }).where(eq(dockDoors.id, door.id));
-           if (door.currentVehicleId) {
-              await db.update(vehicleLogs).set({ status: 'Departed', checkOutTime: new Date() }).where(eq(vehicleLogs.id, door.currentVehicleId));
-           }
-        }
-      }
-      
-            const stateCodes = ['MH', 'KA', 'DL', 'TN', 'GJ', 'TS', 'HR', 'UP', 'WB'];
-      const carriers = ['Apex Heavy Freight', 'Swift Logistics', 'Blue Dart Express', 'VRL Logistics', 'Gati Express', 'Safexpress', 'Rivigo', 'Delhivery Freight', 'TCI Freight', 'Bluedart Surface'];
-      const driverNames = ['Raju Bhai', 'Suresh Kumar', 'Manoj Singh', 'Vikram Yadav', 'Amit Sharma', 'Ramesh Patel', 'Mohd Tariq', 'Kuldeep Singh', 'Harpreet Sandhu', 'Naresh Meena'];
-      
-      const vLogs = [];
-      for(let i=0; i<15; i++) {
-         const randomState = stateCodes[Math.floor(Math.random() * stateCodes.length)];
-         const randomRegionCode = Math.floor(1 + Math.random() * 99).toString().padStart(2, '0');
-         const randomSeries = String.fromCharCode(65 + Math.floor(Math.random() * 26)) + String.fromCharCode(65 + Math.floor(Math.random() * 26));
-         const random4 = Math.floor(1000 + Math.random() * 9000);
-         
-         const carrier = carriers[Math.floor(Math.random() * carriers.length)];
-         const driver = driverNames[Math.floor(Math.random() * driverNames.length)];
-         const phone = `+91 ${Math.floor(9000000000 + Math.random() * 999999999)}`;
-         
-         vLogs.push({
-            vehicleNumber: `${randomState}${randomRegionCode}${randomSeries}${random4}`,
-            carrierName: carrier,
-            type: Math.random() > 0.5 ? 'Inbound' : 'Outbound',
-            driverName: driver,
-            driverContact: phone,
-            scheduledTime: new Date(),
-            status: 'Expected'
-         });
-      }
-      await db.insert(vehicleLogs).values(vLogs);
-
-      const availableDoors = await db.select().from(dockDoors).where(eq(dockDoors.status, 'Available')).limit(5);
-      const pendingVehicles = await db.select().from(vehicleLogs).where(eq(vehicleLogs.status, 'Expected')).limit(5);
-      for (let i = 0; i < Math.min(availableDoors.length, pendingVehicles.length); i++) {
-         await db.update(dockDoors).set({ status: 'Occupied', currentVehicleId: pendingVehicles[i].id }).where(eq(dockDoors.id, availableDoors[i].id));
-         await db.update(vehicleLogs).set({ status: 'Docked', checkInTime: new Date(), dockDoorId: availableDoors[i].id }).where(eq(vehicleLogs.id, pendingVehicles[i].id));
-      }
-
-      // Barcode & RFID (60 scans)
-      const scns = await db.select().from(scanners).limit(10);
-      if (scns.length > 0) {
-         const scansToInsert = [];
-         for(let i=0; i<60; i++) {
-            scansToInsert.push({
-               itemSku: `SKU-${Date.now()}-${i}-${Math.floor(1000+Math.random()*9000)}`,
-               scannerId: scns[Math.floor(Math.random()*scns.length)].id,
-               scanType: ['Pick', 'Pack', 'Receive', 'Count'][Math.floor(Math.random()*4)],
-               status: 'Success',
-               timestamp: new Date(Date.now() - Math.floor(Math.random() * 86400000))
-            });
-         }
-         await db.insert(scanLogs).values(scansToInsert);
-      }
-
-      // Bank Treasury (100 transactions)
-      const accs = await db.select().from(treasuryAccounts).limit(10);
-      if (accs.length > 0) {
-         for (const acc of accs) {
-            const newBalance = Math.floor(Math.random() * 49000000) + 1000000;
-            await db.update(treasuryAccounts).set({ balance: newBalance }).where(eq(treasuryAccounts.id, acc.id));
-         }
-
-         const trans = [];
-         for(let i=0; i<100; i++) {
-            trans.push({
-               accountId: accs[Math.floor(Math.random() * accs.length)].id,
-               type: Math.random() > 0.5 ? 'Credit' : 'Debit',
-               amount: Math.floor(100 + Math.random() * 5000),
-               category: ['Material Purchase', 'Operational Expense', 'Payroll', 'Revenue'][Math.floor(Math.random()*4)],
-               description: `Batch simulation #T${Date.now()}-${i}-${Math.floor(Math.random()*100000)}`
-            });
-         }
-         await db.insert(treasuryTransactions).values(trans);
-      }
-
-      // HR Compliance (10 certs, 10 grievances)
-      const emps = await db.select().from(employees).limit(10);
-      if (emps.length > 0) {
-         const certs = [];
-         const grvs = [];
-         for(let i=0; i<10; i++) {
-            const empId = emps[Math.floor(Math.random() * emps.length)].id;
-            certs.push({
-               employeeId: empId,
-               name: `Safety Training L${Math.floor(1 + Math.random()*5)}-${Date.now()}-${i}`,
-               issueDate: new Date(Date.now() - Math.floor(Math.random() * 86400000 * 100)).toISOString(),
-               expiryDate: new Date(Date.now() + Math.floor(Math.random() * 86400000 * 365)).toISOString()
-            });
-            grvs.push({
-               employeeId: empId,
-               subject: `Workplace query #${Date.now()}-${i}-${Math.floor(Math.random()*10000)}`,
-               description: 'Automated compliance tracking log',
-               status: ['Pending', 'In Progress', 'Resolved'][Math.floor(Math.random()*3)]
-            });
-         }
-         await db.insert(certifications).values(certs);
-         await db.insert(grievances).values(grvs);
-      }
-    } catch(e) { console.error("10m sim error", e); }
-  };
-  setInterval(run10mSim, 10 * 60 * 1000);
-  setTimeout(run10mSim, 3000); // Run slightly after startup
-
-  // 60 Minutes Interval: Leave Requests
-  const run60mSim = async () => {
-    try {
-      const emps = await db.select().from(employees).limit(10);
-      if (emps.length > 0) {
-        const leaves = [];
-        for(let i=0; i<10; i++) {
-           const startOffset = Math.floor(Math.random() * 86400000 * 30);
-           const duration = Math.floor(1 + Math.random() * 5) * 86400000;
-           leaves.push({
-             employeeId: emps[Math.floor(Math.random() * emps.length)].id,
-             startDate: new Date(Date.now() + startOffset).toISOString(),
-             endDate: new Date(Date.now() + startOffset + duration).toISOString(),
-             reason: `Automated leave request ${Date.now()}-${i}-${Math.floor(Math.random()*10000)}`,
-             status: ['Pending', 'Approved', 'Rejected'][Math.floor(Math.random()*3)]
-           });
-        }
-        await db.insert(leaveRequests).values(leaves);
-      }
-    } catch(e) { console.error("60m sim error", e); }
-  };
-  setInterval(run60mSim, 60 * 60 * 1000);
-  setTimeout(run60mSim, 4000); // Run slightly after startup
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
