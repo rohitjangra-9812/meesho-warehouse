@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { fetchApi } from '../lib/api.ts';
-import { Landmark, ArrowUpRight, ArrowDownRight, ShieldCheck, RefreshCw, FileText, Download, CheckCircle, ShieldAlert, Lock, Unlock, FileSignature, Check, AlertTriangle, X } from 'lucide-react';
+import { Landmark, ArrowUpRight, ArrowDownRight, ShieldCheck, RefreshCw, FileText, Download, CheckCircle, ShieldAlert, Lock, Unlock, FileSignature, Check, AlertTriangle, X, Pin } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -352,6 +352,64 @@ export function BankingScreen() {
             </div>
           </div>
 
+          {/* Ledger Summary Balances */}
+          {data?.transactions && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Opening Balance</p>
+                  <p className="text-xl font-black text-gray-900 mt-1">
+                    ₹20,00,00,000
+                  </p>
+                </div>
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+                  <Landmark size={20} />
+                </div>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Credits</p>
+                  <p className="text-xl font-bold text-green-600 mt-1">
+                    +₹{(data.totalCredits ?? data.transactions.filter((t: any) => t.type === 'Credit').reduce((acc: number, t: any) => acc + (t.amount || 0), 0)).toLocaleString('en-IN')}
+                  </p>
+                </div>
+                <div className="p-3 bg-green-50 text-green-600 rounded-lg">
+                  <ArrowDownRight size={20} />
+                </div>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Debits</p>
+                  <p className="text-xl font-bold text-red-600 mt-1">
+                    -₹{(data.totalDebits ?? data.transactions.filter((t: any) => t.type === 'Debit').reduce((acc: number, t: any) => acc + (t.amount || 0), 0)).toLocaleString('en-IN')}
+                  </p>
+                </div>
+                <div className="p-3 bg-red-50 text-red-600 rounded-lg">
+                  <ArrowUpRight size={20} />
+                </div>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Net Ledger Balance</p>
+                  {(() => {
+                    const c = data.totalCredits ?? data.transactions.filter((t: any) => t.type === 'Credit').reduce((acc: number, t: any) => acc + (t.amount || 0), 0);
+                    const d = data.totalDebits ?? data.transactions.filter((t: any) => t.type === 'Debit').reduce((acc: number, t: any) => acc + (t.amount || 0), 0);
+                    const opening = data.openingBalance ?? 200000000;
+                    const netBalance = opening + c - d;
+                    return (
+                      <p className="text-xl font-black text-blue-600 mt-1">
+                        ₹{netBalance.toLocaleString('en-IN')}
+                      </p>
+                    );
+                  })()}
+                </div>
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+                  <Landmark size={20} />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="text-base font-bold text-gray-900">Recent Transactions (Last 10 Min)</h3>
@@ -377,9 +435,23 @@ export function BankingScreen() {
                     const timeStr = new Date(tx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                     
                     return (
-                      <tr key={tx.id} className="hover:bg-gray-50/80 transition-colors">
-                        <td className="px-6 py-3.5 text-gray-500 font-mono text-xs">{timeStr}</td>
-                        <td className="px-6 py-3.5 font-semibold text-gray-900">{tx.counterparty}</td>
+                      <tr key={tx.id} className={`hover:bg-gray-50/80 transition-colors ${tx.pinned ? 'bg-blue-50/30 font-medium' : ''}`}>
+                        <td className="px-6 py-3.5 text-gray-500 font-mono text-xs flex items-center gap-1.5">
+                          {tx.pinned && (
+                            <span title="Permanently Pinned Transaction" className="text-blue-600 bg-blue-100 p-1 rounded-md inline-flex items-center">
+                              <Pin size={12} className="rotate-45" />
+                            </span>
+                          )}
+                          {timeStr}
+                        </td>
+                        <td className="px-6 py-3.5 font-semibold text-gray-900 flex items-center gap-2">
+                          {tx.counterparty}
+                          {tx.pinned && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase tracking-wide">
+                              Pinned
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-3.5 text-gray-600 text-xs">{tx.purpose}</td>
                         <td className="px-6 py-3.5">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${

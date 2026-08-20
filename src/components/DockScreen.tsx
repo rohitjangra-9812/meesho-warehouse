@@ -1,3 +1,5 @@
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import React, { useEffect, useState } from 'react';
 import { fetchApi } from '../lib/api.ts';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -29,6 +31,41 @@ const staffingData = [
 ];
 
 export function DockScreen() {
+
+  const [showGatePassModal, setShowGatePassModal] = useState(false);
+  const [selectedTruck, setSelectedTruck] = useState<any>(null);
+  const [courierPartner, setCourierPartner] = useState('Delhivery');
+  const [manifestGenerated, setManifestGenerated] = useState(false);
+
+  const handleOpenGatePass = (dock: any) => {
+    setSelectedTruck(dock);
+    setShowGatePassModal(true);
+    setManifestGenerated(false);
+  };
+
+  const generatePDFManifest = () => {
+    const doc = new jsPDF();
+    doc.text("Meesho Outbound 3PL Courier Handover Manifest", 14, 20);
+    doc.setFontSize(10);
+    doc.text("Partner: " + courierPartner, 14, 30);
+    doc.text("Dock Station: " + (selectedTruck?.bay || 'Dock #04'), 14, 36);
+    doc.text("Vehicle Number: KA-01-HH-9920", 14, 42);
+    doc.text("Timestamp: " + new Date().toLocaleString(), 14, 48);
+
+    autoTable(doc, {
+      startY: 55,
+      head: [['AWB Tracking', 'Destination Hub', 'Package Count', 'Weight (Kg)', 'Seal Status']],
+      body: [
+        ['AWB-8349281X', 'BLR Hub - South', '320 pkgs', '410 kg', 'Intact #9921'],
+        ['AWB-1122334X', 'DEL Hub - North', '450 pkgs', '580 kg', 'Intact #9922'],
+        ['AWB-5566778Y', 'BOM Hub - West', '280 pkgs', '340 kg', 'Intact #9923'],
+      ]
+    });
+
+    doc.save("Courier_Manifest_" + courierPartner + ".pdf");
+    setManifestGenerated(true);
+  };
+
   const [docks, setDocks] = useState<any[]>([]);
   const [queue, setQueue] = useState<any[]>([]);
   const [autoAssign, setAutoAssign] = useState(true);
@@ -43,7 +80,27 @@ export function DockScreen() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'live' | 'history'>('live');
+  const [activeTab, setActiveTab] = useState<'live' | 'crossdock' | 'history'>('live');
+  const [crossdockItems, setCrossdockItems] = useState([
+    { asnId: 'ASN-8821', supplier: 'Samsung India Corp', sku: 'SKU-ELECT-092', qty: 450, backorders: 430, zone: 'Electronics Zone B', status: 'Ready for Cross-Dock', matchedOrder: 'ORD-9821' },
+    { asnId: 'ASN-8822', supplier: 'Zara Apparel Ltd', sku: 'SKU-FASH-118', qty: 620, backorders: 600, zone: 'Apparel Zone A', status: 'Ready for Cross-Dock', matchedOrder: 'ORD-9822' },
+    { asnId: 'ASN-8823', supplier: 'Nykaa Cosmetics', sku: 'SKU-COSM-331', qty: 280, backorders: 275, zone: 'Cosmetics Zone C', status: 'Staged for Dispatch', matchedOrder: 'ORD-9823' },
+    { asnId: 'ASN-8824', supplier: 'OnePlus Direct', sku: 'SKU-ELEC-440', qty: 150, backorders: 148, zone: 'High-Value Vault', status: 'Ready for Cross-Dock', matchedOrder: 'ORD-9824' }
+  ]);
+  const [crossdockToast, setCrossdockToast] = useState<string | null>(null);
+
+  const showCrossdockToast = (msg: string) => {
+    setCrossdockToast(msg);
+    setTimeout(() => setCrossdockToast(null), 4000);
+  };
+
+  const handleGenerateStagingLabel = (item: any) => {
+    showCrossdockToast(`🏷️ Generated Cross-Dock Staging Label for ${item.asnId} (${item.sku}) - Bypassed Put-Away!`);
+  };
+
+  const handleGenerateHandoverSheet = (item: any) => {
+    showCrossdockToast(`📋 Generated Courier Dispatch Handover Sheet for ${item.matchedOrder} (${item.supplier})`);
+  };
   const [dockHistory, setDockHistory] = useState<any[]>([]);
 
   const fetchHistory = async () => {
@@ -416,6 +473,41 @@ export function DockScreen() {
         </div>
       </div>
 
+      {crossdockToast && (
+        <div className="fixed top-20 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl border border-blue-500/50 flex items-center gap-3 animate-in fade-in slide-in-from-top-5">
+          <Zap className="text-blue-400 animate-pulse" size={20} />
+          <span className="text-sm font-semibold">{crossdockToast}</span>
+        </div>
+      )}
+
+      {/* Tab Selector */}
+      <div className="flex border-b border-gray-200 gap-6">
+        <button
+          onClick={() => setActiveTab('live')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'live' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Truck size={18} /> Live Bays & Queue
+        </button>
+        <button
+          onClick={() => setActiveTab('crossdock')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'crossdock' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <ClipboardCheck size={18} /> Cross-Docking Hub (Fast-Track)
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Clock size={18} /> Dock History & Logs
+        </button>
+      </div>
+
       {/* Docks Grid */}
       {activeTab === 'live' ? (
 <>
@@ -700,6 +792,62 @@ export function DockScreen() {
         </div>
       )}
       </>
+      ) : activeTab === 'crossdock' ? (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/5 to-white p-6 rounded-2xl border border-blue-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-gray-900">Cross-Docking & Fast-Track Direct Fulfillment Hub</h3>
+              <p className="text-xs text-gray-600 mt-1">Automatically matching incoming supplier ASNs against pending customer backorders. Bypasses shelf put-away for instant dispatch.</p>
+            </div>
+            <button 
+              onClick={() => showCrossdockToast('⚡ AI Auto-Matched all incoming ASNs to pending customer backorders.')}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+            >
+              Run AI Cross-Dock Matcher
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
+            {crossdockItems.map((item, idx) => (
+              <div key={idx} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:border-blue-300 transition-all">
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                      {item.asnId}
+                    </span>
+                    <span className="text-xs text-gray-500 font-medium">Supplier: <strong className="text-gray-900">{item.supplier}</strong></span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">{item.status}</span>
+                  </div>
+                  <h4 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <span>SKU: {item.sku}</span>
+                    <span className="text-xs text-gray-400">•</span>
+                    <span className="text-xs text-indigo-600 font-bold">{item.zone}</span>
+                  </h4>
+                  <div className="flex flex-wrap gap-4 text-xs text-gray-600 pt-1">
+                    <div>Incoming Qty: <strong className="text-gray-900">{item.qty} units</strong></div>
+                    <div>Matched Backorders: <strong className="text-green-600 font-bold">{item.backorders} units</strong></div>
+                    <div>Order Ref: <strong className="font-mono text-gray-900">{item.matchedOrder}</strong></div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                  <button
+                    onClick={() => handleGenerateStagingLabel(item)}
+                    className="flex-1 md:flex-none px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <ClipboardCheck size={14} className="text-blue-600" /> Staging Label
+                  </button>
+                  <button
+                    onClick={() => handleGenerateHandoverSheet(item)}
+                    className="flex-1 md:flex-none px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <FileText size={14} /> Courier Handover Sheet
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">

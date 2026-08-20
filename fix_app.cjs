@@ -1,19 +1,23 @@
 const fs = require('fs');
 let code = fs.readFileSync('src/App.tsx', 'utf8');
 
-// Import Video icon
-code = code.replace(/import \{ \n  LayoutDashboard/g, "import { \n  Video,\n  LayoutDashboard");
+// The replacement logic incorrectly messed up the main tags.
+code = code.replace(/<main className="flex-1 flex flex-col min-w-0 overflow-hidden pb-16 md:pb-0">/, `<main className="flex-1 flex flex-col min-w-0 overflow-hidden pb-16 md:pb-0 relative">
+          <div className="absolute inset-0 pointer-events-none opacity-[0.03] flex items-center justify-center overflow-hidden">
+            <svg viewBox="0 0 400 400" className="w-[120%] h-[120%] text-[#f43397]" fill="currentColor">
+               <path d="M200 40 L360 120 L360 280 L200 360 L40 280 L40 120 Z" />
+               <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="60" fontWeight="bold">meesho</text>
+            </svg>
+          </div>
+          <div className="relative z-10 flex flex-col h-full w-full">`);
 
-// Import SurveillanceScreen
-code = code.replace(/import \{ LeadershipScreen \} from '\.\/components\/LeadershipScreen';/g, 
-"import { LeadershipScreen } from './components/LeadershipScreen';\nimport { SurveillanceScreen } from './components/SurveillanceScreen';");
+code = code.replace(/<\/div>\n        <\/main>/, `</div>\n      </main>`);
+code = code.replace(/<\/div>\n      <\/div>\n      <\/main>/, `</div>\n      </div>\n      </main>`);
+// Fixing the actual output:
+// 197|        </div>
+// 198|      </div>
+// 199|        </main>
+code = code.replace(/<\/div>\n      <\/div>\n        <\/main>/, `</div>\n      </div>\n      </div>\n      </main>`);
 
-// Add to navItems
-const navItemsRegex = /\{ icon: ScanBarcode, label: 'Scan Station', path: '\/scanner' \}\n\];/g;
-code = code.replace(navItemsRegex, "{ icon: ScanBarcode, label: 'Scan Station', path: '/scanner' },\n  { icon: Video, label: 'CCTV Security', path: '/cctv' }\n];");
-
-// Add Route
-const routesRegex = /<Route path="\/scanner" element=\{<ProtectedRoute><DashboardLayout><ScannerScreen \/><\/DashboardLayout><\/ProtectedRoute>\} \/>/g;
-code = code.replace(routesRegex, '<Route path="/scanner" element={<ProtectedRoute><DashboardLayout><ScannerScreen /></DashboardLayout></ProtectedRoute>} />\n          <Route path="/cctv" element={<ProtectedRoute><DashboardLayout><SurveillanceScreen /></DashboardLayout></ProtectedRoute>} />');
 
 fs.writeFileSync('src/App.tsx', code);

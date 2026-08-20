@@ -28,6 +28,13 @@ const MOCK_ALERTS = [
   { id: 4, time: '09:50:11', cam: 'CAM-02', msg: 'Tailgating at Perimeter Gate 2', type: 'warning' },
 ];
 
+const VIDEO_SOURCES = [
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4'
+];
+
 const LiveFeed: React.FC<{ cam: any }> = ({ cam }) => {
   const [time, setTime] = useState(new Date().toLocaleTimeString());
   const [overlay, setOverlay] = useState<string | null>(null);
@@ -55,25 +62,41 @@ const LiveFeed: React.FC<{ cam: any }> = ({ cam }) => {
     );
   }
 
+  const camIndex = parseInt(cam.id.replace('CAM-', ''), 10) || 1;
+  const videoSrc = VIDEO_SOURCES[(camIndex - 1) % VIDEO_SOURCES.length];
+
   return (
     <div className="relative bg-gray-950 rounded-lg border border-gray-800 overflow-hidden h-full min-h-[200px] flex flex-col">
-      {/* Fake video static/gradient background */}
-      <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-700 via-gray-900 to-black mix-blend-overlay"></div>
+      {/* Live Looping Warehouse Video Feed */}
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        src={videoSrc}
+        className="absolute inset-0 w-full h-full object-cover opacity-75 contrast-125 brightness-90 filter"
+        onError={(e) => {
+          (e.target as HTMLElement).style.display = 'none';
+        }}
+      />
+
+      {/* CCTV Scanline Overlay */}
+      <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] opacity-40"></div>
       
       {/* Top Overlay */}
-      <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-10 bg-gradient-to-b from-black/60 to-transparent">
+      <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-10 bg-gradient-to-b from-black/70 to-transparent">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 text-white">
-            <span className="font-mono text-sm font-bold">{cam.id}</span>
-            <span className="text-xs text-gray-300 truncate max-w-[150px]">{cam.name}</span>
+            <span className="font-mono text-sm font-bold bg-black/60 px-2 py-0.5 rounded border border-gray-700">{cam.id}</span>
+            <span className="text-xs font-semibold text-gray-200 truncate max-w-[150px] drop-shadow-md">{cam.name}</span>
           </div>
           {cam.isRestricted && (
-             <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-600/80 text-white rounded w-max">RESTRICTED ZONE</span>
+             <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-600/90 text-white rounded w-max animate-pulse">RESTRICTED ZONE</span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-black/50 rounded text-red-500 font-bold text-xs font-mono animate-pulse">
-            <div className="w-2 h-2 rounded-full bg-red-500"></div>
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-black/60 rounded border border-red-900/50 text-red-500 font-bold text-xs font-mono">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-ping"></div>
             REC
           </div>
         </div>
@@ -81,18 +104,18 @@ const LiveFeed: React.FC<{ cam: any }> = ({ cam }) => {
 
       {/* Center AI Bounding Box (mock) */}
       {overlay && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-40 border-2 border-green-500/50 rounded-sm z-10 pointer-events-none">
-          <div className="absolute -top-5 left-0 bg-green-500/80 text-white text-[9px] font-bold px-1 py-0.5 whitespace-nowrap">
-            {overlay} [98%]
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-40 border-2 border-green-500/60 rounded-sm z-10 pointer-events-none">
+          <div className="absolute -top-5 left-0 bg-green-500/90 text-black text-[9px] font-bold px-1 py-0.5 whitespace-nowrap">
+            {overlay} [98.4%]
           </div>
-          <Crosshair className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-green-500/30" size={48} />
+          <Crosshair className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-green-500/40" size={48} />
         </div>
       )}
 
       {/* Bottom Overlay */}
       <div className="absolute bottom-0 left-0 right-0 p-3 flex justify-between items-end z-10 bg-gradient-to-t from-black/80 to-transparent">
-        <span className="text-white font-mono text-xs">{time}</span>
-        <button className="text-gray-400 hover:text-white transition-colors">
+        <span className="text-white font-mono text-xs bg-black/50 px-2 py-0.5 rounded border border-gray-800">{time}</span>
+        <button className="text-gray-300 hover:text-white transition-colors bg-black/40 p-1 rounded">
           <Maximize size={16} />
         </button>
       </div>

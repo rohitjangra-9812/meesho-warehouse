@@ -7,14 +7,18 @@ import { eq, sql, and, desc, ilike } from 'drizzle-orm';
 
 async function startServer() {
   
-let bankBalance = 14528400;
+let openingBalance = 200000000;
 let bankTransactions = [
+        { id: 107, timestamp: Date.now() - 500, counterparty: "Google AI Cloud Services", purpose: "Infrastructure / Cloud", type: "Debit", amount: 35999, status: "Completed", pinned: true },
+        { id: 106, timestamp: Date.now() - 1000, counterparty: "Rita Sharma", purpose: "Accounts Receivable (Ref: xxxxx133)", type: "Credit", amount: 9000, status: "Completed", pinned: true },
+        { id: 105, timestamp: Date.now() - 1500, counterparty: "Harsh Sharma", purpose: "Payroll / Management Adjustment (Harsh Sharma - Management Member Salary Adjustment)", type: "Credit", amount: 1500, status: "Completed", pinned: true },
         { id: 101, timestamp: Date.now() - 30000, counterparty: "Delhivery Surface", purpose: "Freight Charges Settlement", type: "Debit", amount: 45200, status: "Verified" },
         { id: 102, timestamp: Date.now() - 65000, counterparty: "Apex Packaging", purpose: "Corrugated Boxes GRN", type: "Debit", amount: 125000, status: "Verified" },
         { id: 103, timestamp: Date.now() - 95000, counterparty: "Meesho Escrow", purpose: "Daily Sales Settlement", type: "Credit", amount: 845000, status: "Completed" },
         { id: 104, timestamp: Date.now() - 120000, counterparty: "Ramesh Customer", purpose: "RTO Refund", type: "Debit", amount: 1250, status: "Verified" }
 ];
-let nextTxId = 105;
+let bankBalance = openingBalance + bankTransactions.reduce((acc, t) => acc + (t.type === 'Credit' ? t.amount : -t.amount), 0);
+let nextTxId = 108;
 const txTypes = [
   { p: "Courier Logistics", a: [10000, 50000], t: "Debit", c: "Ecom Express" },
   { p: "Warehouse Setup", a: [5000, 20000], t: "Debit", c: "Local Vendor" },
@@ -82,6 +86,25 @@ app.get("/api/health", (req, res) => { res.json({ status: "ok" }); });
       ];
       await db.insert(management).values(leaders);
       console.log("Seeded management");
+    }
+
+    const existingNotices = await db.select().from(notices).limit(1);
+    if (existingNotices.length === 0) {
+      await db.insert(notices).values([
+        {
+          serialNumber: 'MWPL/NOTICE/2026/0820/001',
+          recipient: 'All Warehouse Floor Staff & Supervisors',
+          subject: 'Mandatory Safety & Scanner Calibration Protocol',
+          body: 'All staff operating in Zones A, B, C, and D must complete daily handheld scanner calibration and wear high-visibility vests along with steel-toe footwear. Non-compliance will result in immediate floor suspension.',
+        },
+        {
+          serialNumber: 'MWPL/NOTICE/2026/0820/002',
+          recipient: 'All Shift B & C Personnel',
+          subject: 'Upcoming Festive Mega-Block Shift Schedule',
+          body: 'In preparation for the upcoming Mega Festive Sale, all shifts will transition to extended 9-hour blocks effective immediately. Overtime compensation will be credited directly as per company policy.',
+        }
+      ]);
+      console.log("Seeded initial official notices");
     }
 
     // Check and seed Employees (reduced count for auto-seed to be safe)
@@ -255,6 +278,101 @@ app.get("/api/health", (req, res) => { res.json({ status: "ok" }); });
 
   // API Routes
   
+  // POST /api/system/stream-tick: Generate 20 unique entries across all modules every 5 mins
+  app.post("/api/system/stream-tick", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const timestamp = Date.now();
+      const uniqueId = Math.floor(1000 + Math.random() * 9000);
+
+      // 1. Add Banking/Ledger entry (below the 3 pinned records)
+      bankTransactions.push({
+        id: nextTxId++,
+        timestamp,
+        counterparty: ['Ecom Express', 'Delhivery Surface', 'Apex Packaging', 'Meesho Escrow', 'Shadowfax'][Math.floor(Math.random() * 5)],
+        purpose: `Automated 5-Min Settlement Batch #${uniqueId}`,
+        type: Math.random() > 0.4 ? 'Credit' : 'Debit',
+        amount: Math.floor(15000 + Math.random() * 120000),
+        status: 'Verified'
+      });
+      if (bankTransactions.length > 60) bankTransactions.shift();
+
+      // 2. Add Catalog / Order SKU
+      mockCatalog.unshift({
+        id: mockCatalog.length + 1,
+        sku: `SKU-STREAM-${uniqueId}`,
+        itemName: `Automated Stream Item #${uniqueId}`,
+        quantity: Math.floor(100 + Math.random() * 1000),
+        origin: 'Delhi NCR Hub',
+        sellerName: 'Automated Supplier Co.',
+        businessName: 'Meesho Direct Partners',
+        location: 'Gurugram Warehouse',
+        gstin: `06ABCDE${uniqueId}F1Z${Math.floor(1 + Math.random()*9)}`,
+        phone: `9${Math.floor(100000000 + Math.random() * 900000000)}`,
+        status: 'Active Contract',
+        schedule: '5-min sync stream',
+        agreementDate: new Date().toISOString().split('T')[0]
+      });
+
+      // 3. Add Dock / Yard Arrival
+      const truckNo = `HR-${Math.floor(10 + Math.random()*89)}-AB-${Math.floor(1000 + Math.random()*8999)}`;
+      globalDockHistory.push({
+        id: Date.now(),
+        dock: `Dock Bay ${(Math.floor(Math.random() * 14) + 1).toString().padStart(2, '0')}`,
+        vehicleNo: truckNo,
+        driver: 'Rajesh Driver',
+        material: `Stream Cargo #${uniqueId}`,
+        quantity: Math.floor(250 + Math.random() * 750),
+        status: 'Unloaded'
+      });
+
+      // 4. Add Returns & QC RTO
+      mockReturns.unshift({
+        id: Date.now(),
+        rmaId: `RMA-${uniqueId}`,
+        meeshoOrderId: `MEESHO-${Math.floor(10000000 + Math.random() * 90000000)}`,
+        sku: `SKU-STREAM-${uniqueId}`,
+        reason: 'Automated 5-min batch return test',
+        status: 'Pending Inspection'
+      });
+
+      // 5. Add CCTV / Security event
+      const logEntry = {
+        id: Date.now(),
+        userId: 1,
+        action: `5-Min Automated Stream Ingestion Batch #${uniqueId} processed successfully (+20 entries)`,
+        timestamp: new Date()
+      };
+      await db.insert(auditLogs).values(logEntry);
+
+      res.json({ 
+        success: true, 
+        message: `Successfully ingested 20 unique entries across Banking, Catalog, Docks, Returns, and Security for Batch #${uniqueId}!` 
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Failed to process 5-min stream tick' });
+    }
+  });
+
+  // Background timer running every 5 minutes (300,000 ms) for automated 20-entry sync across modules
+  setInterval(async () => {
+    try {
+      const uniqueId = Math.floor(1000 + Math.random() * 9000);
+      bankTransactions.push({
+        id: nextTxId++,
+        timestamp: Date.now(),
+        counterparty: 'Auto-Stream Gateway',
+        purpose: `Background 5-Min Tick Sync #${uniqueId}`,
+        type: 'Credit',
+        amount: 50000,
+        status: 'Verified'
+      });
+      console.log(`[Background Stream] Automated 5-minute tick executed successfully. Batch #${uniqueId}`);
+    } catch (e) {
+      console.error('[Background Stream Error]', e);
+    }
+  }, 300000);
+
   // POST /api/auth/sync: Kept for compatibility but returns dummy
   app.post("/api/auth/sync", requireAuth, async (req: AuthRequest, res: Response) => {
     res.json({ status: "ok" });
@@ -1651,6 +1769,103 @@ app.post("/api/system/batch-generate", async (req, res) => {
   }
 });
 
+// --- Automated Real-Time Data Stream Simulation (10-Min Tick / 20 Entries) ---
+const performStreamTick = async () => {
+  console.log("[STREAM] Running 10-minute automated data stream tick (+20 entries across modules)...");
+  try {
+    // 1. Banking / Ledger
+    const types = ['Credit', 'Debit'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    const amount = Math.floor(Math.random() * 50000) + 1000;
+    const counterparties = ['Meesho Express Logistics', 'Apex Packaging Corp', 'Delhivery Surface', 'Cloud Infrastructure Services', 'Seller Settlement Payout', 'Supplier Credit Note'];
+    const counterparty = counterparties[Math.floor(Math.random() * counterparties.length)];
+    const tx = {
+      id: Date.now() % 100000,
+      timestamp: Date.now(),
+      counterparty,
+      purpose: type === 'Credit' ? 'Seller Payout / Settlement' : 'Operational Expense / Shipping Fee',
+      type,
+      amount,
+      status: 'Completed'
+    };
+    bankTransactions.unshift(tx);
+    if (type === 'Credit') {
+      bankBalance += amount;
+    } else {
+      bankBalance -= amount;
+    }
+
+    // 2. Catalog & Orders
+    const sku = `SKU-STRM-${Math.floor(1000 + Math.random() * 9000)}`;
+    const [newProd] = await db.insert(products).values({
+      sku,
+      name: `Stream Item ${Math.floor(Math.random()*1000)}`,
+      stockQuantity: Math.floor(Math.random() * 200) + 20,
+      binLocation: `B-${Math.floor(Math.random() * 50) + 1}`,
+      lowStockThreshold: 10,
+      sourceVehicle: `MH-${Math.floor(10 + Math.random() * 90)}-AB-${Math.floor(1000 + Math.random() * 9000)}`,
+      qualityRate: 'Good',
+      category: ['Fashion', 'Electronics', 'Home'][Math.floor(Math.random()*3)]
+    }).returning({ sku: products.sku });
+
+    if (newProd) {
+      await db.insert(orders).values({
+        meeshoOrderId: `MEESHO-STRM-${Math.floor(Math.random()*1000000)}`,
+        sku: newProd.sku,
+        quantity: Math.floor(Math.random() * 3) + 1,
+        customerName: `Stream Buyer ${Math.floor(Math.random()*1000)}`,
+        shippingAddress: `Pincode: ${Math.floor(110000 + Math.random() * 90000)}`,
+        status: 'Pending'
+      });
+    }
+
+    // 3. Docks & Gate Pass / 3PL
+    await db.insert(crossDocking).values({
+      inboundShipmentId: `INB-STRM-${Math.floor(Math.random()*10000)}`,
+      outboundDockId: `Dock-${Math.floor(Math.random()*16)+1}`,
+      status: 'Pending',
+      priority: 'High'
+    });
+
+    // 4. Returns & RTO
+    mockReturns.unshift({
+      id: Date.now(),
+      rmaId: `RMA-STRM-${Math.floor(Math.random()*10000)}`,
+      meeshoOrderId: `MEESHO-${Math.floor(Math.random()*1000000)}`,
+      sku: `SKU-${Math.floor(1000 + Math.random()*9000)}`,
+      reason: ['Wrong size received', 'Damaged in transit', 'Missing item / accessories'][Math.floor(Math.random()*3)],
+      status: 'Pending Inspection'
+    });
+
+    // 5. Scan Station & Conveyors
+    await db.insert(scannerMaintenanceLogs).values({
+      scannerId: 1,
+      maintenanceType: 'Real-time Scan Event',
+      description: `Automated conveyor scan verified barcode SKU-STRM-${Math.floor(Math.random()*1000)}`,
+      technician: 'AI Streamer'
+    });
+
+    // 6. Security & Alerts
+    await db.insert(notices).values({
+      subject: 'Automated Stream Tick Alert',
+      body: '20 new synchronized records ingested across banking, catalog, docks, returns, and scanners.',
+      recipient: 'All Operations'
+    });
+
+    console.log("[STREAM] Stream tick completed successfully with 20 new entries.");
+  } catch (err) {
+    console.error("[STREAM] Error during stream tick:", err);
+  }
+};
+
+// Background interval every 10 minutes (600,000 ms)
+setInterval(performStreamTick, 600000);
+
+app.post("/api/system/stream-tick", async (req, res) => {
+  await performStreamTick();
+  res.json({ success: true, message: "Simulated 10-Min Tick (+20 entries) executed successfully across all portal modules." });
+});
+
 let seenVehiclesToday = new Set<string>();
 
 const generateTrip = () => {
@@ -2111,9 +2326,20 @@ app.post("/api/v3/finance/daily-ledger/verify", requireAuth, async (req, res) =>
 
 app.get("/api/bank/transactions", requireAuth, async (req, res) => {
     try {
+      const totalCredits = bankTransactions.filter(t => t.type === 'Credit').reduce((acc, t) => acc + t.amount, 0);
+      const totalDebits = bankTransactions.filter(t => t.type === 'Debit').reduce((acc, t) => acc + t.amount, 0);
+      const netLedgerBalance = openingBalance + totalCredits - totalDebits;
+
       res.json({
-        balance: bankBalance,
-        transactions: [...bankTransactions].sort((a, b) => b.timestamp - a.timestamp).map(t => ({...t, timestamp: new Date(t.timestamp).toISOString()}))
+        openingBalance,
+        balance: netLedgerBalance,
+        totalCredits,
+        totalDebits,
+        transactions: [...bankTransactions].sort((a: any, b: any) => {
+          if (a.pinned && !b.pinned) return -1;
+          if (!a.pinned && b.pinned) return 1;
+          return b.timestamp - a.timestamp;
+        }).map(t => ({...t, timestamp: new Date(t.timestamp).toISOString()}))
       });
     } catch(e) {
       res.status(500).json({ error: "Failed to fetch banking data" });
@@ -2220,6 +2446,87 @@ app.get("/api/bank/transactions", requireAuth, async (req, res) => {
     const { action } = req.body;
     let newStatus = action === 'Restock' ? 'Restocked' : 'Liquidated';
     mockReturns = mockReturns.map(r => r.id === id ? { ...r, status: newStatus } : r);
+    res.json({ success: true });
+  });
+
+  // Safety Incidents & SOS System
+  let safetyIncidents = [
+    { id: 1, type: 'Forklift Collision', zone: 'Dock Bay 03', marshal: 'Marshal Rajesh Kumar', status: 'Active', timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(), resolutionTime: null },
+    { id: 2, type: 'Chemical/Liquid Spill', zone: 'Aisle Zone B', marshal: 'Marshal Priya Sharma', status: 'Resolved', timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), resolutionTime: '24 mins' },
+    { id: 3, type: 'Medical Emergency', zone: 'Outbound Packing', marshal: 'Marshal Amit Verma', status: 'Resolved', timestamp: new Date(Date.now() - 1000 * 60 * 300).toISOString(), resolutionTime: '18 mins' }
+  ];
+
+  app.get("/api/safety/incidents", requireAuth, async (req, res) => {
+    res.json(safetyIncidents);
+  });
+
+  app.post("/api/safety/incidents", requireAuth, async (req, res) => {
+    const { type, zone, marshal } = req.body;
+    const newInc = {
+      id: Date.now(),
+      type: type || 'Emergency SOS Broadcast',
+      zone: zone || 'Main Floor Zone A',
+      marshal: marshal || 'Marshal Rajesh Kumar (On Duty)',
+      status: 'Active',
+      timestamp: new Date().toISOString(),
+      resolutionTime: null
+    };
+    safetyIncidents.unshift(newInc);
+    res.json({ success: true, incident: newInc });
+  });
+
+  app.post("/api/safety/incidents/:id/resolve", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    safetyIncidents = safetyIncidents.map(inc => inc.id === id ? { ...inc, status: 'Resolved', resolutionTime: '12 mins' } : inc);
+    res.json({ success: true });
+  });
+
+  // Inter-Hub Transfers (STO) & Cross-Warehouse Inventory
+  let interHubTransfers = [
+    { id: 1, stoId: 'STO-BLR-9821', sourceHub: 'Delhi NCR Hub (Current)', destHub: 'Bengaluru FC (KA)', sku: 'SKU-ELECT-092', qty: 500, sealNo: 'SEAL-883192', status: 'In Transit', timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString() },
+    { id: 2, stoId: 'STO-BHI-4421', sourceHub: 'Delhi NCR Hub (Current)', destHub: 'Bhiwandi FC (MH)', sku: 'SKU-FASH-118', qty: 750, sealNo: 'SEAL-442190', status: 'Customs Verified', timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString() },
+    { id: 3, stoId: 'STO-KOL-1109', sourceHub: 'Kolkata Hub (WB)', destHub: 'Delhi NCR Hub (Current)', sku: 'SKU-COSM-331', qty: 300, sealNo: 'SEAL-110942', status: 'Delivered', timestamp: new Date(Date.now() - 1000 * 60 * 500).toISOString() }
+  ];
+
+  const hubInventory = [
+    { hubName: 'Delhi NCR Hub (Current Center)', location: 'Gurugram, HR', totalSkuCount: 1450, totalStock: 485000, status: 'Operational' },
+    { hubName: 'Bengaluru FC', location: 'Hosur Road, KA', totalSkuCount: 1280, totalStock: 390000, status: 'Operational' },
+    { hubName: 'Bhiwandi FC', location: 'Mumbai Outskirt, MH', totalSkuCount: 1600, totalStock: 620000, status: 'Operational' },
+    { hubName: 'Kolkata Hub', location: 'Rajarhat, WB', totalSkuCount: 950, totalStock: 210000, status: 'Operational' },
+    { hubName: 'Hyderabad FC', location: 'Shamshabad, TS', totalSkuCount: 1100, totalStock: 340000, status: 'Operational' }
+  ];
+
+  app.get("/api/hubs/inventory", requireAuth, async (req, res) => {
+    res.json(hubInventory);
+  });
+
+  app.get("/api/hubs/transfers", requireAuth, async (req, res) => {
+    res.json(interHubTransfers);
+  });
+
+  app.post("/api/hubs/transfers", requireAuth, async (req, res) => {
+    const { destHub, sku, qty } = req.body;
+    const stoId = `STO-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.floor(Math.random() * 8999 + 1000)}`;
+    const sealNo = `SEAL-${Math.floor(Math.random() * 899999 + 100000)}`;
+    const newSto = {
+      id: Date.now(),
+      stoId,
+      sourceHub: 'Delhi NCR Hub (Current)',
+      destHub: destHub || 'Bengaluru FC (KA)',
+      sku: sku || 'SKU-GENERAL-001',
+      qty: Number(qty) || 100,
+      sealNo,
+      status: 'In Transit',
+      timestamp: new Date().toISOString()
+    };
+    interHubTransfers.unshift(newSto);
+    res.json({ success: true, transfer: newSto });
+  });
+
+  app.post("/api/hubs/transfers/:id/status", requireAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const { status } = req.body;
+    interHubTransfers = interHubTransfers.map(t => t.id === id ? { ...t, status: status || 'Delivered' } : t);
     res.json({ success: true });
   });
 

@@ -1,824 +1,782 @@
-import React, { useEffect, useState } from 'react';
-import { fetchApi } from '../lib/api.ts';
-import { Settings, Users, Download, ClipboardCheck, AlertCircle, Info, Plus, Search, Edit2, Trash2, X, FileText, CheckCircle2, Stamp, Calendar, ArrowUp, ArrowDown, BarChart2, Receipt, BadgeCheck, IndianRupee } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { 
+  Users, UserPlus, FileText, ShieldCheck, Download, Search, Filter, 
+  CheckCircle2, AlertCircle, Sparkles, X, ChevronLeft, ChevronRight, 
+  Building2, Phone, Mail, Award, Check, FileCheck, Shield, Lock
+} from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { MeeshoLogo } from './MeeshoLogo';
 
 export function EmployeeScreen() {
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filterDept, setFilterDept] = useState('All');
+  const [activeTab, setActiveTab] = useState<'directory' | 'agreements' | 'payroll' | 'leaderboard'>('directory');
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [viewAgreement, setViewAgreement] = useState<any | null>(null);
-  const [viewPayslip, setViewPayslip] = useState<any | null>(null);
-  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'roster' | 'approvals'>('roster');
-  const [pendingPayrollIds, setPendingPayrollIds] = useState<number[]>([]);
-  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [hrSignatoryName, setHrSignatoryName] = useState(() => localStorage.getItem('hrSignatoryName') || 'Rohit Angra');
+  // 400 Staff Members generation
+  const [employees, setEmployees] = useState<any[]>(() => {
+    const departments = ['Inbound Receiving', 'Wave Picking', 'Packing & QC', 'Dock Logistics', 'Returns & RTO', 'Security', 'Maintenance'];
+    const designations = ['Floor Associate', 'Shift Lead', 'Forklift Driver', 'QC Specialist'];
+    const shifts = ['Morning A', 'Evening B', 'Night C'];
+    const firstNames = ['Aarav', 'Vivaan', 'Aditya', 'Vihaan', 'Arjun', 'Sai', 'Reyansh', 'Ayaan', 'Krishna', 'Ishaan', 'Sunita', 'Priya', 'Ananya', 'Diya', 'Kavita', 'Neha', 'Pooja', 'Sneha', 'Ritu', 'Anita', 'Ravi', 'Amit', 'Vikas', 'Deepak', 'Sandeep', 'Anil', 'Manoj', 'Rahul', 'Rohit', 'Sanjay'];
+    const lastNames = ['Kumar', 'Sharma', 'Singh', 'Verma', 'Gupta', 'Yadav', 'Malik', 'Chauhan', 'Saini', 'Reddy', 'Patel', 'Joshi', 'Tiwari', 'Desai', 'Rao'];
 
-  useEffect(() => {
-    localStorage.setItem('hrSignatoryName', hrSignatoryName);
-  }, [hrSignatoryName]);
+    return Array.from({ length: 400 }, (_, i) => {
+      const idNum = i + 1;
+      const empId = `MSH-EMP-${String(idNum).padStart(3, '0')}`;
+      const fName = firstNames[i % firstNames.length];
+      const lName = lastNames[(i * 7) % lastNames.length];
+      const name = `${fName} ${lName}`;
+      const department = departments[i % departments.length];
+      const designation = designations[i % designations.length];
+      const shift = shifts[i % shifts.length];
+      const salaryTier = `₹${(24000 + (i % 6) * 3500).toLocaleString()}/mo`;
+      const salaryNum = 24000 + (i % 6) * 3500;
+      const phone = `+91 ${9000000000 + (i * 37) % 999999999}`;
+      const agreementStatus = i < 378 ? 'Signed' : i < 395 ? 'Pending' : 'Expired';
 
-  
-  const [formData, setFormData] = useState({
-    name: '', fathersName: '', department: 'Packing Department', age: 21,
-    qualification: '10th Pass', homeState: 'Bihar', experience: 'Fresher',
-    salary: 20000, phone: '', email: '', emergencyContact: '', status: 'Active'
-  });
-
-  const fetchData = async () => {
-    try {
-      const [empRes, statsRes] = await Promise.all([
-        fetchApi('/employees'),
-        fetchApi('/employees/stats')
-      ]);
-      setEmployees(empRes);
-      setStats(statsRes);
-      if (empRes.length > 0 && pendingPayrollIds.length === 0) {
-        setPendingPayrollIds(empRes.slice(2, 5).map((e: any) => e.id));
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const handleDelete = async (id: number) => {
-    if(confirm('Are you sure you want to deactivate/remove this employee?')) {
-      await fetchApi(`/employees/${id}`, { method: 'DELETE' });
-      fetchData();
-    }
-  };
-
-  const handleEdit = (emp: any) => {
-    setEditingId(emp.id);
-    setFormData(emp);
-    setIsModalOpen(true);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingId) {
-      await fetchApi(`/employees/${editingId}`, {
-        method: 'PUT',
-        body: JSON.stringify(formData)
-      });
-    } else {
-      await fetchApi('/employees', {
-        method: 'POST',
-        body: JSON.stringify(formData)
-      });
-    }
-    setIsModalOpen(false);
-    setEditingId(null);
-    fetchData();
-  };
-
-  
-  const handleBulkDownload = () => {
-    setIsDownloadingZip(true);
-    // Simulate generation of bulk zipped PDFs
-    setTimeout(() => {
-      setIsDownloadingZip(false);
-      const verifiedCount = employees.length - pendingPayrollIds.length;
-      
-      // Create a dummy blob representing the ZIP containing PDFs
-      const content = "ZIP_MOCK: Contains " + verifiedCount + " verified payslips in PDF format.";
-      const blob = new Blob([content], { type: 'application/zip' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Verified_Payslips_${new Date().toLocaleString('default', { month: 'short', year: 'numeric' })}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 2000);
-  };
-
-  const openNew = () => {
-    setEditingId(null);
-    setFormData({
-      name: '', fathersName: '', department: 'Packing Department', age: 21,
-      qualification: '10th Pass', homeState: 'Bihar', experience: 'Fresher',
-      salary: 20000, phone: '', email: '', emergencyContact: '', status: 'Active'
+      return {
+        id: idNum,
+        empId,
+        name,
+        department,
+        designation,
+        shift,
+        salaryTier,
+        salary: salaryNum,
+        phone,
+        email: `${fName.toLowerCase()}.${lName.toLowerCase()}${idNum}@meeshowms.com`,
+        agreementStatus,
+        zone: `${department} - Zone ${(i % 4) + 1}`,
+        status: i % 12 === 0 ? 'Off Duty' : 'On Shift',
+        pph: 90 + (i % 60)
+      };
     });
-    setIsModalOpen(true);
-  };
-
-  const filteredEmployees = employees.filter(e => {
-    const matchesSearch = e.name.toLowerCase().includes(search.toLowerCase()) || 
-                          e.empId.toLowerCase().includes(search.toLowerCase());
-    const matchesDept = filterDept === 'All' || e.department === filterDept;
-    return matchesSearch && matchesDept;
   });
 
-  const allDepts = ['All', 'Packing Department', 'Scanning / Intake', 'Material Handling', 'General Workers', 'Security Guard / Loss Prevention', 'Fleet Drivers / Logistics', 'Management Team'];
+  // Filter & Search state for Directory
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterDept, setFilterDept] = useState('All');
+  const [filterShift, setFilterShift] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
+
+  // Modals state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [viewingAgreementEmp, setViewingAgreementEmp] = useState<any | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // New staff form state
+  const [newName, setNewName] = useState('');
+  const [newDept, setNewDept] = useState('Inbound Receiving');
+  const [newDesignation, setNewDesignation] = useState('Floor Associate');
+  const [newShift, setNewShift] = useState('Morning A');
+  const [newPhone, setNewPhone] = useState('');
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const filteredEmployees = useMemo(() => {
+    return employees.filter(emp => {
+      const matchesSearch = emp.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            emp.empId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            emp.phone.includes(searchQuery);
+      const matchesDept = filterDept === 'All' || emp.department === filterDept;
+      const matchesShift = filterShift === 'All' || emp.shift === filterShift;
+      const matchesStatus = filterStatus === 'All' || emp.agreementStatus === filterStatus;
+      return matchesSearch && matchesDept && matchesShift && matchesStatus;
+    });
+  }, [employees, searchQuery, filterDept, filterShift, filterStatus]);
+
+  const totalPages = Math.ceil(filteredEmployees.length / pageSize) || 1;
+  const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const signedCount = employees.filter(e => e.agreementStatus === 'Signed').length;
+  const pendingCount = employees.filter(e => e.agreementStatus === 'Pending' || e.agreementStatus === 'Expired').length;
+
+  const handleAddEmployee = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName) return;
+    const newIdNum = employees.length + 1;
+    const newEmp = {
+      id: newIdNum,
+      empId: `MSH-EMP-${String(newIdNum).padStart(3, '0')}`,
+      name: newName,
+      department: newDept,
+      designation: newDesignation,
+      shift: newShift,
+      salaryTier: '₹28,000/mo',
+      salary: 28000,
+      phone: newPhone || '+91 9876543210',
+      email: `${newName.toLowerCase().replace(/\s+/g, '')}@meeshowms.com`,
+      agreementStatus: 'Pending',
+      zone: `${newDept} - Zone 1`,
+      status: 'On Shift',
+      pph: 100
+    };
+    setEmployees([newEmp, ...employees]);
+    setIsAddModalOpen(false);
+    setNewName('');
+    setNewPhone('');
+    showToast(`✅ Successfully onboarded staff member ${newEmp.empId} - ${newName}`);
+  };
+
+  const handleBulkSignAll = () => {
+    setEmployees(prev => prev.map(emp => ({ ...emp, agreementStatus: 'Signed' })));
+    showToast('📜 Bulk Sign Triggered: All 400 staff agreements verified and signed by Harsh Sharma.');
+  };
+
+  const exportCSV = () => {
+    const headers = ['Employee ID', 'Full Name', 'Department', 'Designation', 'Shift', 'Salary Tier', 'Phone', 'Agreement Status'];
+    const rows = filteredEmployees.map(e => [e.empId, e.name, e.department, e.designation, e.shift, e.salaryTier, e.phone, e.agreementStatus]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'meesho_warehouse_staff_roster.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('📥 Exported staff roster to CSV successfully.');
+  };
+
+  const downloadIndividualPDF = (emp: any) => {
+    const doc = new jsPDF();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('MEESHO WAREHOUSE FULFILLMENT PVT. LTD.', 14, 20);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('NIT Faridabad Fulfillment Center • Haryana Operational Division', 14, 26);
+    
+    doc.setLineWidth(0.5);
+    doc.line(14, 32, 196, 32);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('EMPLOYMENT & SAFETY COMPLIANCE AGREEMENT', 14, 42);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Agreement Ref: MWPL/AGR/2026/${emp.empId}`, 14, 48);
+    doc.text(`Date of Issuance: August 20, 2026`, 14, 54);
+
+    autoTable(doc, {
+      startY: 62,
+      head: [['Employee Detail Field', 'Record Information']],
+      body: [
+        ['Employee ID', emp.empId],
+        ['Full Name', emp.name],
+        ['Department & Zone', `${emp.department} (${emp.zone})`],
+        ['Designation', emp.designation],
+        ['Shift Schedule', emp.shift],
+        ['Compensation Package', emp.salaryTier],
+        ['Contact Number', emp.phone],
+        ['Agreement Status', emp.agreementStatus.toUpperCase()],
+      ]
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Standard Operational Clauses & Safety Regulations:', 14, finalY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const clauses = [
+      '1. Warehouse Safety & PPE: Mandatory wearing of high-visibility vests, steel-toe boots, and assigned barcode scanners during all operational hours.',
+      '2. Data Confidentiality & Anti-Theft: Strict prohibition of unauthorized entry into high-value electronics vaults and treasury blocks.',
+      '3. Working Hours & Overtime: Standard shifts are 8 hours with 1.5x overtime compensation approved by shift leads.',
+      '4. Equipment Care: Proper handling of material handling equipment (MHE) and automated conveyor lines.'
+    ];
+    clauses.forEach((clause, idx) => {
+      doc.text(clause, 14, finalY + 8 + (idx * 6));
+    });
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Verified & Authenticated By:', 14, finalY + 38);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Harsh Sharma (Operations Management)', 14, finalY + 44);
+    doc.text('Meesho Warehouse Fulfillment Pvt. Ltd.', 14, finalY + 50);
+
+    doc.save(`Agreement_${emp.empId}_${emp.name.replace(/\s+/g, '_')}.pdf`);
+    showToast(`📄 Downloaded agreement PDF for ${emp.name} (${emp.empId})`);
+  };
 
   return (
-    <div className="space-y-6 relative">
-      {/* Audit Banner */}
-      <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-center gap-3">
-        <Info className="text-blue-600 w-5 h-5 shrink-0" />
-        <p className="text-sm font-medium text-blue-800">
-          System scheduled update: Roster sync and personnel modifications refresh automatically every 2 days.
-        </p>
-      </div>
+    <div className="space-y-6 pb-12 animate-in">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl border border-pink-500/50 flex items-center gap-3 animate-in fade-in slide-in-from-top-5">
+          <Sparkles className="text-[#f43397] animate-pulse" size={20} />
+          <span className="text-sm font-semibold">{toastMessage}</span>
+        </div>
+      )}
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Employee Management</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage personnel, rosters, and operational teams</p>
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight">Employee Directory & 400-Staff Agreement Hub</h2>
+          <p className="text-sm text-gray-500 mt-1">Manage 400 warehouse associates, contract renewals, digital signatures, and compliance audit logs.</p>
         </div>
-        <div className="flex flex-wrap gap-2 justify-end">
-        <button 
-          onClick={handleBulkDownload}
-          disabled={isDownloadingZip}
-          className={`inline-flex items-center justify-center gap-2 px-4 py-2 ${isDownloadingZip ? 'bg-indigo-100 text-indigo-400' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'} rounded-lg font-medium text-sm transition-colors shadow-sm`}
-        >
-          <Download size={16} className={isDownloadingZip ? "animate-bounce" : ""} /> 
-          {isDownloadingZip ? "Archiving PDFs..." : "Download All Payslips"}
-        </button>
-        <button 
-          onClick={() => setIsSettingsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg font-medium text-sm hover:bg-gray-50 transition-colors shadow-sm"
-        >
-          <Settings size={16} /> HR Settings
-        </button>
-        <button 
-          onClick={openNew}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <Plus size={16} /> Add New Employee
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-xl shadow-sm transition-all"
+          >
+            <Download size={16} />
+            <span>Export Roster (CSV)</span>
+          </button>
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#f43397] hover:bg-[#d82481] text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+          >
+            <UserPlus size={16} />
+            <span>Add New Staff Member</span>
+          </button>
         </div>
       </div>
-      {/* Tabs */}
-      <div className="flex space-x-1 border-b border-gray-200 mt-2 mb-4">
+
+      {/* Sub-Tabs */}
+      <div className="flex border-b border-gray-200 gap-6 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('roster')}
-          className={`px-5 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'roster' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('directory')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'directory' ? 'border-[#f43397] text-[#f43397]' : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
         >
-          Active Roster
+          <Users size={18} /> Staff Directory & Spreadsheet ({employees.length})
         </button>
         <button
-          onClick={() => setActiveTab('approvals')}
-          className={`px-5 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition-colors ${activeTab === 'approvals' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('agreements')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'agreements' ? 'border-[#f43397] text-[#f43397]' : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
         >
-          HR Pending Approval
-          {pendingPayrollIds.length > 0 && (
-            <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black animate-pulse">
-              {pendingPayrollIds.length}
-            </span>
-          )}
+          <FileCheck size={18} /> Agreements & Contracts ({signedCount}/{employees.length} Signed)
+        </button>
+        <button
+          onClick={() => setActiveTab('payroll')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'payroll' ? 'border-[#f43397] text-[#f43397]' : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Award size={18} /> Payslips & Payroll
+        </button>
+        <button
+          onClick={() => setActiveTab('leaderboard')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'leaderboard' ? 'border-[#f43397] text-[#f43397]' : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          🏆 Productivity Leaderboard
         </button>
       </div>
 
-      {/* Stats & Filters */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col justify-center">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-              <Users size={20} />
+      {/* TAB 1: DIRECTORY SPREADSHEET */}
+      {activeTab === 'directory' && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          {/* Search and Filters Bar */}
+          <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative w-full md:w-96">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Search by Employee Name, ID (e.g. MSH-EMP-045)..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#f43397]"
+              />
             </div>
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Total Headcount</h3>
-          </div>
-          <p className="text-4xl font-extrabold text-gray-900">{stats?.total || 350}</p>
-        </div>
 
-        <div className="lg:col-span-3 bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Departments</h3>
-          <div className="flex flex-wrap gap-2">
-            {allDepts.map(dept => (
-              <button
-                key={dept}
-                onClick={() => setFilterDept(dept)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                  filterDept === dept 
-                    ? 'bg-gray-900 text-white' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <select
+                value={filterDept}
+                onChange={(e) => { setFilterDept(e.target.value); setCurrentPage(1); }}
+                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none"
               >
-                {dept} {dept !== 'All' && stats?.departments && `(${stats.departments[dept] || 0})`}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+                <option value="All">All Departments</option>
+                <option value="Inbound Receiving">Inbound Receiving</option>
+                <option value="Wave Picking">Wave Picking</option>
+                <option value="Packing & QC">Packing & QC</option>
+                <option value="Dock Logistics">Dock Logistics</option>
+                <option value="Returns & RTO">Returns & RTO</option>
+                <option value="Security">Security</option>
+                <option value="Maintenance">Maintenance</option>
+              </select>
 
-      {/* Table Controls */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-          <div className="relative w-full max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input 
-              type="text" 
-              placeholder="Search by ID or Name..." 
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-            />
-          </div>
-          <div className="flex items-center gap-4">
-            {activeTab === 'approvals' && pendingPayrollIds.length > 0 && (
-              <button
-                onClick={() => setPendingPayrollIds([])}
-                className="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+              <select
+                value={filterShift}
+                onChange={(e) => { setFilterShift(e.target.value); setCurrentPage(1); }}
+                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none"
               >
-                Batch Approve All ({pendingPayrollIds.length})
-              </button>
-            )}
-            <div className="text-sm font-medium text-gray-500">
-              Showing {filteredEmployees.length} records
+                <option value="All">All Shifts</option>
+                <option value="Morning A">Morning A</option>
+                <option value="Evening B">Evening B</option>
+                <option value="Night C">Night C</option>
+              </select>
+
+              <select
+                value={filterStatus}
+                onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none"
+              >
+                <option value="All">All Agreements</option>
+                <option value="Signed">Signed</option>
+                <option value="Pending">Pending</option>
+                <option value="Expired">Expired</option>
+              </select>
             </div>
           </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1200px]">
-            <thead>
-              <tr className="bg-gray-50 text-xs font-semibold tracking-wide text-gray-500 uppercase border-b border-gray-200">
-                <th className="px-6 py-4">Employee</th>
-                <th className="px-6 py-4">Department</th>
-                <th className="px-6 py-4">Profile</th>
-                <th className="px-6 py-4">Contact & Location</th>
-                <th className="px-6 py-4 text-right">Salary</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
-              {loading ? (
-                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400">Loading roster...</td></tr>
-              ) : filteredEmployees.slice(0, 50).map((emp: any) => (
-                <tr key={emp.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="font-bold text-gray-900">{emp.name}</div>
-                    <div className="text-xs text-gray-500 mt-1 font-mono">{emp.empId}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="font-medium text-gray-700">{emp.department}</span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <button onClick={() => setViewAgreement(emp)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors border border-blue-200 shadow-sm whitespace-nowrap">
-                      <FileText size={14} /> View Contract
-                    </button>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-gray-900 font-medium">{emp.age} yrs • {emp.experience}</div>
-                    <div className="text-xs text-gray-500 mt-1">{emp.qualification}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-gray-900 font-medium">+91 {emp.phone}</div>
-                    <div className="text-xs text-gray-500 mt-1 font-mono break-all max-w-[180px]">{emp.email}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{emp.homeState}</div>
-                  </td>
-                  <td className="px-6 py-4 text-right font-medium text-gray-900">
-                    ₹{emp.salary?.toLocaleString('en-IN')}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 rounded text-xs font-bold ${
-                      emp.status === 'Active' ? 'bg-green-100 text-green-700' : 
-                      emp.status === 'On Leave' ? 'bg-orange-100 text-orange-700' :
-                      'bg-blue-100 text-blue-700'
-                    }`}>
-                      {emp.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    {activeTab === 'approvals' ? (
-                      <button 
-                        onClick={() => setPendingPayrollIds(prev => prev.filter(id => id !== emp.id))} 
-                        className="px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 rounded font-bold text-xs uppercase tracking-wide transition-colors border border-red-200"
-                      >
-                        Approve Payroll
-                      </button>
-                    ) : (
-                      <>
-                        <button onClick={() => setViewPayslip(emp)} className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors" title="Generate Payslip">
-                      <Receipt size={16} />
-                    </button>
-                    
-                    <button onClick={() => handleEdit(emp)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                      <Edit2 size={16} />
-                    </button>
-                    <button onClick={() => handleDelete(emp.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
-                      <Trash2 size={16} />
-                    </button>
-                      </>
-                    )}
-                  </td>
+          {/* Table */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500 font-bold uppercase border-b border-gray-200">
+                    <th className="px-4 py-3">Employee ID</th>
+                    <th className="px-4 py-3">Full Name</th>
+                    <th className="px-4 py-3">Department</th>
+                    <th className="px-4 py-3">Designation</th>
+                    <th className="px-4 py-3">Shift</th>
+                    <th className="px-4 py-3">Salary Tier</th>
+                    <th className="px-4 py-3">Contact Phone</th>
+                    <th className="px-4 py-3">Agreement</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedEmployees.length === 0 ? (
+                    <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No staff members found matching criteria.</td></tr>
+                  ) : (
+                    paginatedEmployees.map(emp => (
+                      <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-pink-600">{emp.empId}</td>
+                        <td className="px-4 py-3 font-bold text-gray-900">{emp.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{emp.department}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{emp.designation}</td>
+                        <td className="px-4 py-3 text-gray-600">{emp.shift}</td>
+                        <td className="px-4 py-3 font-mono text-gray-900">{emp.salaryTier}</td>
+                        <td className="px-4 py-3 font-mono text-gray-600">{emp.phone}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${
+                            emp.agreementStatus === 'Signed' ? 'bg-green-100 text-green-700' :
+                            emp.agreementStatus === 'Pending' ? 'bg-amber-100 text-amber-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {emp.agreementStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => setViewingAgreementEmp(emp)}
+                            className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-[#f43397] font-bold rounded-lg transition-colors"
+                          >
+                            View Contract
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+              <span className="text-xs text-gray-500 font-semibold">
+                Showing {Math.min(1, filteredEmployees.length)} - {Math.min(currentPage * pageSize, filteredEmployees.length)} of {filteredEmployees.length} staff members
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 border border-gray-300 rounded-lg bg-white text-gray-600 disabled:opacity-40 hover:bg-gray-100"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-xs font-bold text-gray-700 px-2">Page {currentPage} of {totalPages}</span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 border border-gray-300 rounded-lg bg-white text-gray-600 disabled:opacity-40 hover:bg-gray-100"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: AGREEMENTS & CONTRACTS */}
+      {activeTab === 'agreements' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Overview counters & Bulk action banner */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white p-6 rounded-2xl shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-100">Signed & Verified</p>
+                <h3 className="text-3xl font-black mt-1">{signedCount} / 400</h3>
+                <p className="text-xs text-emerald-200 mt-1">94.5% Compliance Rate</p>
+              </div>
+              <ShieldCheck size={40} className="text-emerald-200 opacity-80" />
+            </div>
+
+            <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white p-6 rounded-2xl shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-100">Pending Signature</p>
+                <h3 className="text-3xl font-black mt-1">{pendingCount} / 400</h3>
+                <p className="text-xs text-amber-200 mt-1">Action Required</p>
+              </div>
+              <AlertCircle size={40} className="text-amber-200 opacity-80" />
+            </div>
+
+            <div className="bg-gradient-to-br from-pink-600 to-rose-700 text-white p-6 rounded-2xl shadow-sm flex flex-col justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-pink-100">Master Agreement Engine</p>
+                <p className="text-xs text-pink-100 mt-1">All contracts authenticated by Harsh Sharma.</p>
+              </div>
+              <button
+                onClick={handleBulkSignAll}
+                className="mt-3 px-4 py-2 bg-white text-pink-700 hover:bg-pink-50 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm"
+              >
+                Bulk Issue & Sign All (400)
+              </button>
+            </div>
+          </div>
+
+          {/* Standard Terms Clause Viewer */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-4">
+            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <Lock size={18} className="text-[#f43397]" /> Standard Terms & Compliance Clause Viewer
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1">
+                <h4 className="text-xs font-black uppercase tracking-wider text-gray-800">1. Warehouse Safety & PPE Compliance</h4>
+                <p className="text-xs text-gray-600">Mandatory wearing of high-visibility safety vests, steel-toe boots, and calibrated barcode scanners during all operational hours.</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1">
+                <h4 className="text-xs font-black uppercase tracking-wider text-gray-800">2. Data Confidentiality & Anti-Theft Policy</h4>
+                <p className="text-xs text-gray-600">Strict prohibition of unauthorized entry into high-value electronics vaults and treasury blocks. Zero tolerance for inventory leakage.</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1">
+                <h4 className="text-xs font-black uppercase tracking-wider text-gray-800">3. Working Hours & Overtime Compensation</h4>
+                <p className="text-xs text-gray-600">Standard shifts are 8 hours. Overtime is credited at 1.5x standard hourly rates for peak sale surge handling.</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1">
+                <h4 className="text-xs font-black uppercase tracking-wider text-gray-800">4. Equipment Care & Forklift Regulations</h4>
+                <p className="text-xs text-gray-600">Certified operators only for MHE and forklifts. Pre-shift inspection checklists are mandatory before operation.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Pending / Review Table */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-4">
+            <h3 className="text-base font-bold text-gray-900">Staff Contract Action Queue</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500 font-bold uppercase border-b border-gray-200">
+                    <th className="px-4 py-3">Emp ID</th>
+                    <th className="px-4 py-3">Name</th>
+                    <th className="px-4 py-3">Department</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Contract Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {employees.slice(0, 10).map(emp => (
+                    <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-mono font-bold text-pink-600">{emp.empId}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{emp.name}</td>
+                      <td className="px-4 py-3 text-gray-600">{emp.department}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                          emp.agreementStatus === 'Signed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {emp.agreementStatus}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setViewingAgreementEmp(emp)}
+                          className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition-colors"
+                        >
+                          View Agreement
+                        </button>
+                        <button
+                          onClick={() => downloadIndividualPDF(emp)}
+                          className="px-3 py-1 bg-[#f43397] hover:bg-[#d82481] text-white font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                        >
+                          <Download size={12} /> PDF
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: PAYROLL & PAYSLIPS */}
+      {activeTab === 'payroll' && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-6 animate-in fade-in">
+          <div className="flex justify-between items-center border-b pb-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Staff Payroll & Official Payslips</h3>
+              <p className="text-sm text-gray-500">Generate and download certified monthly payslips with HRA, PF, and PPH bonus breakdown.</p>
+            </div>
+            <span className="bg-pink-50 text-[#f43397] font-bold px-3 py-1 rounded-full text-xs border border-pink-200">Pay Cycle: August 2026</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 font-bold uppercase border-b">
+                  <th className="px-4 py-3">Emp ID</th>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Designation</th>
+                  <th className="px-4 py-3">Base Salary</th>
+                  <th className="px-4 py-3">Net Payable</th>
+                  <th className="px-4 py-3 text-right">Payslip Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredEmployees.length > 50 && (
-            <div className="px-6 py-4 text-center text-sm text-gray-500 bg-gray-50 border-t border-gray-100">
-              Showing first 50 results. Please use search to find specific employees.
-            </div>
-          )}
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {employees.slice(0, 12).map(emp => (
+                  <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-mono font-bold text-pink-600">{emp.empId}</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{emp.name}</td>
+                    <td className="px-4 py-3 text-gray-600">{emp.designation}</td>
+                    <td className="px-4 py-3 font-mono">{emp.salaryTier}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-emerald-600">₹{(emp.salary - 1800).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => downloadIndividualPDF(emp)}
+                        className="px-3 py-1.5 bg-[#f43397] hover:bg-[#d82481] text-white font-bold rounded-lg transition-colors shadow-sm inline-flex items-center gap-1.5"
+                      >
+                        <Download size={13} /> Download Payslip PDF
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Add / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur z-10">
-              <h3 className="text-lg font-bold text-gray-900">{editingId ? 'Edit Employee' : 'Add New Employee'}</h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+      {/* TAB 4: LEADERBOARD */}
+      {activeTab === 'leaderboard' && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-6 animate-in fade-in">
+          <div className="flex justify-between items-center border-b pb-4">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Warehouse Staff Productivity Leaderboard</h3>
+              <p className="text-sm text-gray-500">Picks Per Hour (PPH) and zero-defect accuracy rankings across all 400 associates.</p>
+            </div>
+            <span className="bg-emerald-50 text-emerald-700 font-bold px-3 py-1 rounded-full text-xs border border-emerald-200">Active Shift: Morning A</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="bg-gradient-to-br from-pink-500 to-rose-600 text-white p-6 rounded-2xl shadow-md flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-pink-100">Top Speed Picker</p>
+                <h4 className="text-2xl font-black mt-1">Sunita Devi (MSH-EMP-001)</h4>
+                <p className="text-sm text-pink-200 mt-0.5">142 Picks / Hour</p>
+              </div>
+              <div className="text-3xl">👑</div>
+            </div>
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-6 rounded-2xl shadow-md flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-blue-100">Zero Defect Master</p>
+                <h4 className="text-2xl font-black mt-1">Ravi Kumar (MSH-EMP-002)</h4>
+                <p className="text-sm text-blue-200 mt-0.5">100% Accuracy</p>
+              </div>
+              <div className="text-3xl">🎯</div>
+            </div>
+            <div className="bg-gradient-to-br from-purple-600 to-violet-700 text-white p-6 rounded-2xl shadow-md flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-purple-100">Average PPH</p>
+                <h4 className="text-2xl font-black mt-1">118.4 PPH</h4>
+                <p className="text-sm text-purple-200 mt-0.5">+14% vs Target</p>
+              </div>
+              <div className="text-3xl">🚀</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW AGREEMENT MODAL */}
+      {viewingAgreementEmp && (
+        <div className="fixed inset-0 bg-gray-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col border border-gray-100 animate-in zoom-in-95">
+            <div className="px-6 py-4 bg-gradient-to-r from-pink-600 to-rose-700 text-white flex items-center justify-between sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <MeeshoLogo size={32} />
+                <div>
+                  <h3 className="text-base font-black tracking-wide">Employment & Safety Agreement</h3>
+                  <p className="text-[10px] text-pink-100">Ref: MWPL/AGR/2026/{viewingAgreementEmp.empId}</p>
+                </div>
+              </div>
+              <button onClick={() => setViewingAgreementEmp(null)} className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
                 <X size={20} />
               </button>
             </div>
-            
-            <form onSubmit={handleSave} className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Full Name</label>
-                  <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+
+            <div className="p-6 space-y-6 text-sm text-gray-700 font-sans">
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 grid grid-cols-2 gap-3 text-xs">
+                <div><span className="text-gray-500 font-semibold">Employee ID:</span> <strong className="text-gray-900">{viewingAgreementEmp.empId}</strong></div>
+                <div><span className="text-gray-500 font-semibold">Full Name:</span> <strong className="text-gray-900">{viewingAgreementEmp.name}</strong></div>
+                <div><span className="text-gray-500 font-semibold">Department:</span> <strong className="text-gray-900">{viewingAgreementEmp.department}</strong></div>
+                <div><span className="text-gray-500 font-semibold">Designation:</span> <strong className="text-gray-900">{viewingAgreementEmp.designation}</strong></div>
+                <div><span className="text-gray-500 font-semibold">Shift Schedule:</span> <strong className="text-gray-900">{viewingAgreementEmp.shift}</strong></div>
+                <div><span className="text-gray-500 font-semibold">Compensation:</span> <strong className="text-gray-900">{viewingAgreementEmp.salaryTier}</strong></div>
+              </div>
+
+              <div className="space-y-3 text-xs leading-relaxed text-gray-600">
+                <h4 className="font-bold text-gray-900 uppercase tracking-wider text-xs">Terms & Conditions of Employment:</h4>
+                <p>1. <strong>Warehouse Safety & PPE Compliance</strong>: All associates must wear high-vis vests, steel-toe boots, and calibrated barcode scanners during operational hours.</p>
+                <p>2. <strong>Data Confidentiality & Anti-Theft</strong>: Strict prohibition of unauthorized entry into high-value electronics vaults and treasury blocks.</p>
+                <p>3. <strong>Working Hours & Overtime</strong>: Standard 8-hour shifts with approved 1.5x overtime compensation.</p>
+                <p>4. <strong>Equipment Care</strong>: Proper handling of material handling equipment (MHE) and automated conveyor lines.</p>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="text-emerald-600 w-8 h-8" />
+                  <div>
+                    <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wider">Verified Signature Stamp</p>
+                    <p className="text-xs font-bold text-gray-900">Harsh Sharma (Operations Management)</p>
+                    <p className="text-[10px] text-emerald-700">Meesho Warehouse Fulfillment Pvt. Ltd.</p>
+                  </div>
                 </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  viewingAgreementEmp.agreementStatus === 'Signed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {viewingAgreementEmp.agreementStatus}
+                </span>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setViewingAgreementEmp(null)}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-100 shadow-sm"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => downloadIndividualPDF(viewingAgreementEmp)}
+                className="px-4 py-2 bg-[#f43397] hover:bg-[#d82481] text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2"
+              >
+                <Download size={14} /> Download PDF Contract
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD NEW STAFF MODAL */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-gray-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in zoom-in-95">
+            <div className="px-6 py-4 bg-gradient-to-r from-pink-600 to-rose-700 text-white flex items-center justify-between">
+              <h3 className="text-base font-black">Onboard New Warehouse Staff Member</h3>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEmployee} className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold uppercase tracking-wider text-gray-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. Rahul Sharma"
+                  className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#f43397] focus:outline-none text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Father's Name</label>
-                  <input required type="text" value={formData.fathersName} onChange={e => setFormData({...formData, fathersName: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Department</label>
-                  <select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                    {allDepts.filter(d => d !== 'All').map(d => <option key={d}>{d}</option>)}
+                  <label className="block font-bold uppercase tracking-wider text-gray-700 mb-1">Department</label>
+                  <select
+                    value={newDept}
+                    onChange={(e) => setNewDept(e.target.value)}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl font-medium focus:outline-none"
+                  >
+                    <option value="Inbound Receiving">Inbound Receiving</option>
+                    <option value="Wave Picking">Wave Picking</option>
+                    <option value="Packing & QC">Packing & QC</option>
+                    <option value="Dock Logistics">Dock Logistics</option>
+                    <option value="Returns & RTO">Returns & RTO</option>
+                    <option value="Security">Security</option>
+                    <option value="Maintenance">Maintenance</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Home State</label>
-                  <select value={formData.homeState} onChange={e => setFormData({...formData, homeState: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                    {['Bihar', 'UP', 'Punjab', 'Haryana', 'Delhi'].map(d => <option key={d}>{d}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Age</label>
-                  <input required type="number" value={formData.age} onChange={e => setFormData({...formData, age: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Salary (₹)</label>
-                  <input required type="number" min="20000" value={formData.salary} onChange={e => setFormData({...formData, salary: Number(e.target.value)})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Contact Number</label>
-                  <input required type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Email Address</label>
-                  <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Status</label>
-                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                    {['Active', 'On Leave', 'Shift Active'].map(d => <option key={d}>{d}</option>)}
+                  <label className="block font-bold uppercase tracking-wider text-gray-700 mb-1">Designation</label>
+                  <select
+                    value={newDesignation}
+                    onChange={(e) => setNewDesignation(e.target.value)}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl font-medium focus:outline-none"
+                  >
+                    <option value="Floor Associate">Floor Associate</option>
+                    <option value="Shift Lead">Shift Lead</option>
+                    <option value="Forklift Driver">Forklift Driver</option>
+                    <option value="QC Specialist">QC Specialist</option>
                   </select>
                 </div>
               </div>
-              
-              <div className="pt-6 border-t border-gray-200 flex justify-end gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 rounded-lg text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-gray-700 mb-1">Shift Schedule</label>
+                  <select
+                    value={newShift}
+                    onChange={(e) => setNewShift(e.target.value)}
+                    className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl font-medium focus:outline-none"
+                  >
+                    <option value="Morning A">Morning A</option>
+                    <option value="Evening B">Evening B</option>
+                    <option value="Night C">Night C</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-gray-700 mb-1">Contact Phone</label>
+                  <input
+                    type="text"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    placeholder="+91 9876543210"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl font-medium focus:outline-none text-sm font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-xl font-bold text-gray-700 hover:bg-gray-100"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors">
-                  {editingId ? 'Save Changes' : 'Register Employee'}
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#f43397] text-white rounded-xl font-bold hover:bg-[#d82481] shadow-md"
+                >
+                  Save & Onboard Staff
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      {/* View Agreement Modal (PDF Style) */}
-      {viewAgreement && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto font-serif text-left">
-            {/* Action Bar */}
-            <div className="bg-gray-100 border-b border-gray-300 px-6 py-3 flex items-center justify-between sticky top-0 z-10 font-sans">
-              <span className="text-sm font-bold text-gray-600 flex items-center gap-2">
-                <FileText size={16} /> Official Employee Contract Document
-              </span>
-              <div className="flex gap-2">
-                <button onClick={() => window.print()} className="px-4 py-1.5 bg-white border border-gray-300 rounded text-sm font-semibold text-gray-700 hover:bg-gray-50">
-                  Print PDF
-                </button>
-                <button onClick={() => setViewAgreement(null)} className="px-4 py-1.5 bg-gray-800 text-white rounded text-sm font-semibold hover:bg-gray-900">
-                  Close
-                </button>
-              </div>
-            </div>
-
-            {/* Document Body */}
-            <div className="p-8 md:p-12 text-gray-800 space-y-8">
-              {/* Header */}
-              <div className="text-center border-b-2 border-gray-800 pb-6">
-                <h1 className="text-2xl md:text-3xl font-black uppercase tracking-widest text-gray-900">Meesho Logistics</h1>
-                <h2 className="text-xl md:text-2xl font-bold mt-2">Warehouse Employment Agreement</h2>
-                <p className="text-sm text-gray-600 mt-2 font-mono">Contract Ref: EMP-{viewAgreement.id}-{Date.now().toString().slice(-6)}</p>
-              </div>
-
-              {/* Duration & Parties */}
-              <div className="space-y-4 text-justify leading-relaxed">
-                <p>
-                  This Warehouse Employment Agreement ("Agreement") is effective immediately, by and between:
-                </p>
-                <div className="grid md:grid-cols-2 gap-6 bg-gray-50 p-6 border border-gray-200">
-                  <div>
-                    <h3 className="font-bold uppercase text-sm mb-2 text-gray-900 border-b border-gray-300 pb-1">Entity 1: The Employer</h3>
-                    <p className="font-semibold">Meesho Logistics Pvt. Ltd.</p>
-                    <p className="text-sm">Central Inward & Fulfillment Hub</p>
-                    <p className="text-sm">Authorized HR: Insp. {hrSignatoryName}</p>
-                  </div>
-                  <div>
-                    <h3 className="font-bold uppercase text-sm mb-2 text-gray-900 border-b border-gray-300 pb-1">Entity 2: The Employee</h3>
-                    <p className="font-semibold">{viewAgreement.name}</p>
-                    <p className="text-sm">Father's Name: {viewAgreement.fathersName}</p>
-                    <p className="text-sm">Contact Number: +91 {viewAgreement.phone}</p>
-                    <p className="text-sm">Registered Domicile: {viewAgreement.homeState}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Deal Terms */}
-              <div className="space-y-4 leading-relaxed">
-                <h3 className="text-lg font-bold uppercase tracking-wide border-b border-gray-300 pb-1">1. Scope of Employment</h3>
-                <p>
-                  The Employee is officially hired for the position within the <strong>{viewAgreement.department}</strong>. The Employee agrees to perform the designated warehouse duties efficiently and in compliance with Meesho Logistics standard operational protocols.
-                </p>
-                
-                <h3 className="text-lg font-bold uppercase tracking-wide border-b border-gray-300 pb-1 mt-6">2. Compensation & Salary Terms</h3>
-                <p>
-                  The Employer agrees to compensate the Employee with a structured gross monthly remuneration of <strong>₹{(viewAgreement.salary || 0)?.toLocaleString('en-IN')}</strong>. This salary is subject to standard tax deductions, attendance performance, and operational KPIs evaluated directly by the warehouse management team.
-                </p>
-
-                <h3 className="text-lg font-bold uppercase tracking-wide border-b border-gray-300 pb-1 mt-6">3. Legal Liability & Warehouse Compliance</h3>
-                <p>
-                  The Employee assumes full legal liability for maintaining safety standards, asset protection, and operational discipline on the warehouse floor. Any breach of Meesho Logistics standard operating procedures (SOPs) or security protocols will result in immediate disciplinary action up to termination.
-                </p>
-              </div>
-
-              {/* Signatures */}
-              <div className="mt-12 pt-12 border-t-2 border-gray-800 grid grid-cols-1 md:grid-cols-2 gap-12">
-                <div className="text-center">
-                  <div className="h-24 flex items-center justify-center flex-col relative">
-                    <Stamp size={64} className="text-blue-900/20 absolute -rotate-12" />
-                    <span className="font-signature text-3xl text-blue-900 relative z-10 block -rotate-3">{hrSignatoryName}</span>
-                  </div>
-                  <div className="border-t border-gray-400 mt-2 pt-2">
-                    <p className="font-bold text-gray-900">Insp. {hrSignatoryName}</p>
-                    <p className="text-xs text-gray-600 uppercase">Authorized HR & Inspector</p>
-                    <p className="text-xs text-gray-500 font-mono mt-1">Meesho Logistics</p>
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <div className="h-24 flex items-center justify-center">
-                    <span className="font-signature text-3xl text-gray-800 block -rotate-2">{viewAgreement.name}</span>
-                  </div>
-                  <div className="border-t border-gray-400 mt-2 pt-2">
-                    <p className="font-bold text-gray-900">{viewAgreement.name}</p>
-                    <p className="text-xs text-gray-600 uppercase">Employee Counter-Signature</p>
-                    <p className="text-xs text-gray-500 font-mono mt-1">Timestamp: {new Date().toISOString().split('T')[0]}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Verification Footer */}
-            <div className="bg-green-50 border-t border-green-200 p-4 flex items-center justify-center gap-2 text-green-800 font-sans">
-              <CheckCircle2 size={20} className="text-green-600" />
-              <span className="font-bold tracking-wide uppercase text-sm">Verified & Authorized Employment Contract — Active Status</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Shift Analysis Modal */}
-      {isScheduleModalOpen && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <BarChart2 size={20} className="text-blue-600"/> Labor Scheduling Analysis
-              </h3>
-              <button onClick={() => setIsScheduleModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-6">
-              {/* Header KPI */}
-              <div className="grid md:grid-cols-3 gap-6">
-                <div className="bg-white p-5 border border-gray-200 rounded-xl shadow-sm">
-                  <div className="text-sm font-bold text-gray-500 mb-1 uppercase tracking-wide">Peak Over-staffing</div>
-                  <div className="text-3xl font-black text-gray-900 flex items-center gap-2">
-                    14:00 - 16:00 <ArrowUp className="text-red-500" size={24} />
-                  </div>
-                  <p className="text-sm text-red-600 font-medium mt-2">+12 surplus staff detected</p>
-                </div>
-                <div className="bg-white p-5 border border-gray-200 rounded-xl shadow-sm">
-                  <div className="text-sm font-bold text-gray-500 mb-1 uppercase tracking-wide">Peak Under-staffing</div>
-                  <div className="text-3xl font-black text-gray-900 flex items-center gap-2">
-                    08:00 - 10:00 <ArrowDown className="text-orange-500" size={24} />
-                  </div>
-                  <p className="text-sm text-orange-600 font-medium mt-2">-8 staff shortfall detected</p>
-                </div>
-                <div className="bg-white p-5 border border-gray-200 rounded-xl shadow-sm">
-                  <div className="text-sm font-bold text-gray-500 mb-1 uppercase tracking-wide">Optimization Saving</div>
-                  <div className="text-3xl font-black text-gray-900">
-                    ₹ 18,400 <span className="text-sm text-gray-400 font-medium font-sans">/day</span>
-                  </div>
-                  <p className="text-sm text-green-600 font-medium mt-2">Potential savings if smoothed</p>
-                </div>
-              </div>
-
-              {/* Chart/Grid representation */}
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 bg-white">
-                  <h4 className="font-bold text-gray-900">Shift Overlap Map (Today)</h4>
-                  <p className="text-xs text-gray-500 mt-1">Cross-referencing Morning, General, and Evening shifts against predictive volume.</p>
-                </div>
-                <div className="p-6">
-                  {/* Pseudo-chart container */}
-                  <div className="space-y-4">
-                    {[
-                      { time: '06:00 - 08:00', load: 30, capacity: 35, status: 'Optimal' },
-                      { time: '08:00 - 10:00', load: 85, capacity: 60, status: 'Under-staffed' },
-                      { time: '10:00 - 12:00', load: 70, capacity: 75, status: 'Optimal' },
-                      { time: '12:00 - 14:00', load: 60, capacity: 75, status: 'Optimal' },
-                      { time: '14:00 - 16:00', load: 45, capacity: 90, status: 'Over-staffed' },
-                      { time: '16:00 - 18:00', load: 60, capacity: 55, status: 'Warning' },
-                      { time: '18:00 - 20:00', load: 80, capacity: 85, status: 'Optimal' },
-                      { time: '20:00 - 22:00', load: 40, capacity: 45, status: 'Optimal' }
-                    ].map((slot, i) => (
-                      <div key={i} className="flex items-center gap-4">
-                        <div className="w-28 text-xs font-bold text-gray-500 font-mono text-right">{slot.time}</div>
-                        <div className="flex-1 h-8 bg-gray-100 rounded-md relative flex items-center">
-                          {/* Capacity Bar */}
-                          <div 
-                            className={`absolute left-0 top-0 bottom-0 rounded-md opacity-40 ${
-                              slot.status === 'Over-staffed' ? 'bg-red-400' : 
-                              slot.status === 'Under-staffed' ? 'bg-orange-400' : 'bg-blue-400'
-                            }`} 
-                            style={{ width: `${slot.capacity}%` }}
-                          ></div>
-                          {/* Load line */}
-                          <div 
-                            className="absolute top-0 bottom-0 border-r-2 border-gray-900 z-10"
-                            style={{ left: `${slot.load}%` }}
-                          ></div>
-                        </div>
-                        <div className="w-32">
-                          <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${
-                            slot.status === 'Over-staffed' ? 'bg-red-100 text-red-700' :
-                            slot.status === 'Under-staffed' ? 'bg-orange-100 text-orange-700' :
-                            slot.status === 'Warning' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-green-100 text-green-700'
-                          }`}>{slot.status}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Legend */}
-                  <div className="mt-8 flex items-center justify-center gap-6 border-t border-gray-100 pt-4">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-gray-600">
-                      <div className="w-4 h-4 bg-blue-400 opacity-40 rounded"></div> Shift Capacity
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-semibold text-gray-600">
-                      <div className="w-1 h-4 bg-gray-900"></div> Predictive Volume Load
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Recs */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 shadow-sm">
-                <h4 className="text-blue-900 font-bold mb-2">AI Recommendation</h4>
-                <p className="text-sm text-blue-800">
-                  Delay General Shift start times by 2 hours (10:00 to 19:00 instead of 08:00 to 17:00) for 15 workers in the Packing Department. This will completely smooth the 14:00 over-staffing spike and cover the 18:00 volume warning.
-                </p>
-                <button className="mt-4 px-4 py-2 bg-blue-600 text-white font-bold text-sm rounded-lg hover:bg-blue-700 transition-colors">
-                  Draft Schedule Revision
-                </button>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
-
-
-      {/* Payslip Modal */}
-      {viewPayslip && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto font-sans text-left rounded-xl">
-            {/* Action Bar */}
-            <div className="bg-gray-100 border-b border-gray-300 px-6 py-3 flex items-center justify-between sticky top-0 z-10">
-              <span className="text-sm font-bold text-gray-600 flex items-center gap-2">
-                <Receipt size={16} /> Automated End-of-Month Payslip
-              </span>
-              <div className="flex gap-2">
-                <button onClick={() => window.print()} className="px-4 py-1.5 bg-white border border-gray-300 rounded text-sm font-semibold text-gray-700 hover:bg-gray-50">
-                  Print PDF
-                </button>
-                <button onClick={() => setViewPayslip(null)} className="px-4 py-1.5 bg-gray-800 text-white rounded text-sm font-semibold hover:bg-gray-900">
-                  Close
-                </button>
-              </div>
-            </div>
-
-            {/* Payslip Document */}
-            <div className="p-8 md:p-10 text-gray-800">
-              {/* Header */}
-              <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-6">
-                <div>
-                  <h1 className="text-2xl font-black uppercase tracking-widest text-gray-900">Meesho Logistics</h1>
-                  <p className="text-sm text-gray-600 font-medium">Central Inward & Fulfillment Hub</p>
-                  <p className="text-sm text-gray-600 font-medium">Salary Slip - End of Month ({new Date().toLocaleString('default', { month: 'long', year: 'numeric' })})</p>
-                </div>
-                <div className="text-right">
-                  {pendingPayrollIds.includes(viewPayslip.id) ? (
-                    <div className="inline-flex items-center gap-1 bg-red-50 text-red-700 px-3 py-1 rounded-full border border-red-200 text-xs font-bold uppercase tracking-wider mb-2">
-                      <AlertCircle size={14} /> Pending HR Approval
-                    </div>
-                  ) : (
-                    <div className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-3 py-1 rounded-full border border-green-200 text-xs font-bold uppercase tracking-wider mb-2">
-                      <BadgeCheck size={14} /> Verified
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500 font-mono">Auto-generated via System</p>
-                </div>
-              </div>
-
-              {/* Employee Details */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5 mb-8 bg-blue-50/30 p-6 rounded-xl border border-blue-100">
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Employee Name</p>
-                  <p className="text-base font-bold text-gray-900">{viewPayslip.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Employee ID</p>
-                  <p className="text-base font-bold text-gray-900 font-mono">{viewPayslip.empId || `EMP-${viewPayslip.id.toString().padStart(4, '0')}`}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Department</p>
-                  <p className="font-semibold text-gray-800">{viewPayslip.department}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Base Salary</p>
-                  <p className="font-bold text-green-700">₹{(viewPayslip.salary || 0).toLocaleString('en-IN')}/mo</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Bank A/C Number</p>
-                  <p className="font-semibold text-gray-800 font-mono">XXXX-XXXX-{(viewPayslip.id * 1234).toString().slice(-4).padStart(4, '0')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">UAN / PF Number</p>
-                  <p className="font-semibold text-gray-800 font-mono">1009{viewPayslip.id.toString().padStart(6, '0')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Days Worked</p>
-                  <p className="font-semibold text-gray-800">30 / 30 Days</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Designation</p>
-                  <p className="font-semibold text-gray-800">{viewPayslip.department === 'Management Team' ? 'Manager' : 'Staff Worker'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Contact No.</p>
-                  <p className="font-semibold text-gray-800">+91 {viewPayslip.phone}</p>
-                </div>
-              </div>
-
-              {/* Salary Breakdown */}
-              <div className="border border-gray-200 rounded-xl overflow-hidden mb-8">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-600">
-                    <tr>
-                      <th className="px-6 py-3 border-b border-gray-200">Earnings</th>
-                      <th className="px-6 py-3 border-b border-gray-200 text-right">Amount (₹)</th>
-                      <th className="px-6 py-3 border-b border-gray-200 border-l">Deductions</th>
-                      <th className="px-6 py-3 border-b border-gray-200 text-right">Amount (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 text-sm">
-                    <tr>
-                      <td className="px-6 py-3 font-semibold text-gray-800">Basic Salary</td>
-                      <td className="px-6 py-3 text-right font-mono">{((viewPayslip.salary || 0) * 0.5).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                      <td className="px-6 py-3 font-semibold text-gray-800 border-l">PF Deduction</td>
-                      <td className="px-6 py-3 text-right font-mono text-red-600">{((viewPayslip.salary || 0) * 0.05).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-6 py-3 font-semibold text-gray-800">HRA</td>
-                      <td className="px-6 py-3 text-right font-mono">{((viewPayslip.salary || 0) * 0.3).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                      <td className="px-6 py-3 font-semibold text-gray-800 border-l">Professional Tax</td>
-                      <td className="px-6 py-3 text-right font-mono text-red-600">{((viewPayslip.salary || 0) * 0.02).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-6 py-3 font-semibold text-gray-800">Special Allowance</td>
-                      <td className="px-6 py-3 text-right font-mono">{((viewPayslip.salary || 0) * 0.2).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                      <td className="px-6 py-3 font-semibold text-gray-800 border-l">Other Deductions</td>
-                      <td className="px-6 py-3 text-right font-mono text-red-600">0.00</td>
-                    </tr>
-                  </tbody>
-                  <tfoot className="bg-gray-50 border-t-2 border-gray-800 font-bold text-gray-900 text-sm uppercase">
-                    <tr>
-                      <td className="px-6 py-4">Total Gross Earnings</td>
-                      <td className="px-6 py-4 text-right font-mono">₹{(viewPayslip.salary || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                      <td className="px-6 py-4 border-l">Total Deductions</td>
-                      <td className="px-6 py-4 text-right font-mono text-red-600">₹{((viewPayslip.salary || 0) * 0.07).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Net Salary Highlight */}
-              <div className="flex flex-col sm:flex-row items-center justify-between bg-gray-900 text-white p-6 rounded-xl mb-12">
-                <div>
-                  <p className="text-sm text-gray-300 font-semibold uppercase tracking-widest mb-1">Net Pay Transferred</p>
-                  <p className="text-xs text-gray-400">Credited directly to employee bank account</p>
-                </div>
-                <div className="text-3xl font-black font-mono tracking-tight text-green-400">
-                  ₹{((viewPayslip.salary || 0) * 0.93).toLocaleString('en-IN', {minimumFractionDigits: 2})}
-                </div>
-              </div>
-
-              {/* Signatures */}
-              <div className="flex justify-between items-end">
-                <div className="text-center">
-                  <div className="h-16 border-b border-gray-400 w-48 mb-2"></div>
-                  <p className="font-bold text-gray-900">Employee Signature</p>
-                </div>
-                <div className="text-center">
-                  <div className="h-24 flex items-center justify-center flex-col relative">
-                    <Stamp size={64} className="text-green-700/10 absolute -rotate-12" />
-                    <span className="font-signature text-3xl text-gray-900 relative z-10 block -rotate-3">{hrSignatoryName}</span>
-                  </div>
-                  <div className="border-t border-gray-400 mt-2 pt-2 w-56">
-                    <p className="font-bold text-gray-900">{hrSignatoryName}</p>
-                    <p className="text-xs text-gray-600 uppercase font-semibold">Authorized HR Manager</p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
-
-
-      {/* HR Settings Modal */}
-      {isSettingsModalOpen && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <Settings size={20} className="text-blue-600"/> HR Admin Settings
-              </h3>
-              <button onClick={() => setIsSettingsModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Authorized HR Signatory Name</label>
-                  <p className="text-xs text-gray-500 mb-2">This name will appear on all generated employment contracts and automated payslips.</p>
-                  <input
-                    type="text"
-                    value={hrSignatoryName}
-                    onChange={(e) => setHrSignatoryName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="e.g. Rohit Angra"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
-              <button
-                onClick={() => setIsSettingsModalOpen(false)}
-                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg text-sm hover:bg-blue-700"
-              >
-                Save Settings
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

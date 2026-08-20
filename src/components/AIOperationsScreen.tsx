@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BrainCircuit, LineChart as LineChartIcon, Map, Target, Bot, Zap, 
   ArrowRight, TrendingUp, AlertCircle, CheckCircle2, Box, Activity, 
@@ -32,6 +32,34 @@ const activeWaves = [
 ];
 
 export function AIOperationsScreen() {
+
+  const [telemetry, setTelemetry] = useState({
+    vibration: '2.4 mm/s',
+    temperature: '68.4 °C',
+    beltSpeed: '1.2 m/s',
+    status: 'Warning'
+  });
+  const [workOrderCreated, setWorkOrderCreated] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      // Fluctuate slightly to simulate live IoT sensors
+      const vib = (2.2 + Math.random() * 0.8).toFixed(1);
+      const temp = (67 + Math.random() * 3).toFixed(1);
+      setTelemetry({
+        vibration: vib + ' mm/s',
+        temperature: temp + ' °C',
+        beltSpeed: '1.2 m/s',
+        status: Number(vib) > 2.7 ? 'Critical Alert' : 'Normal'
+      });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const createMaintenanceWorkOrder = () => {
+    setWorkOrderCreated(true);
+  };
+
   
 const visionEvents = [
   { id: 'SCN-8821', time: '10:42 AM', type: 'Dimension Mismatch', sku: 'SKU-9921', expected: '20x10x5 cm', actual: '22x12x6 cm', status: 'Flagged' },
@@ -67,7 +95,19 @@ const twinSimData = [
   { time: '20:00', baseline: 140, simulated: 210 },
 ];
 
-const [activeTab, setActiveTab] = useState<'slotting' | 'routing' | 'vision' | 'labor' | 'yard' | 'twin' | 'maintenance' | 'copilot' | 'reports'>('slotting');
+const [activeTab, setActiveTab] = useState<'slotting' | 'routing' | 'vision' | 'labor' | 'yard' | 'twin' | 'maintenance' | 'copilot' | 'reports' | 'climate'>('slotting');
+  const [climateZones, setClimateZones] = useState([
+    { name: 'Cosmetics Zone C', temp: 21.2, humidity: 45, status: 'Optimal', threshold: '24°C Max', sensorId: 'SNS-C01' },
+    { name: 'Electronics Zone B', temp: 29.4, humidity: 68, status: 'Warning', threshold: '28°C Max', sensorId: 'SNS-B04' },
+    { name: 'Ambient Zone A', temp: 27.5, humidity: 62, status: 'Optimal', threshold: '30°C Max', sensorId: 'SNS-A12' },
+    { name: 'High-Value Vault', temp: 19.4, humidity: 40, status: 'Optimal', threshold: '22°C Max', sensorId: 'SNS-V02' }
+  ]);
+  const [climateToast, setClimateToast] = useState<string | null>(null);
+
+  const showClimateToast = (msg: string) => {
+    setClimateToast(msg);
+    setTimeout(() => setClimateToast(null), 4000);
+  };
   
   const [reportEmails, setReportEmails] = useState<string[]>(['management@warehouse.com', 'operations@warehouse.com']);
   const [newEmail, setNewEmail] = useState('');
@@ -106,11 +146,19 @@ const [activeTab, setActiveTab] = useState<'slotting' | 'routing' | 'vision' | '
           </button>
           <button 
             onClick={() => setActiveTab('routing')}
-            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors flex items-center gap-2 \${
+            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors flex items-center gap-2 ${
               activeTab === 'routing' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             <Map size={16} /> Wave Routing & AMRs
+          </button>
+          <button 
+            onClick={() => setActiveTab('climate')}
+            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors flex items-center gap-2 ${
+              activeTab === 'climate' ? 'bg-white text-purple-700 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Gauge size={16} /> Climate Sensors
           </button>
         </div>
       </div>
@@ -1023,6 +1071,92 @@ const [activeTab, setActiveTab] = useState<'slotting' | 'routing' | 'vision' | '
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {climateToast && (
+        <div className="fixed top-20 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl border border-purple-500/50 flex items-center gap-3 animate-in fade-in slide-in-from-top-5">
+          <Gauge className="text-purple-400 animate-pulse" size={20} />
+          <span className="text-sm font-semibold">{climateToast}</span>
+        </div>
+      )}
+
+      {activeTab === 'climate' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-white p-6 rounded-2xl border border-purple-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <Gauge className="text-purple-600" /> Cold-Chain & Environmental IoT Telemetry Hub
+              </h3>
+              <p className="text-xs text-gray-600 mt-1">Real-time temperature, humidity, and airflow sensors across temperature-sensitive warehouse zones.</p>
+            </div>
+            <button
+              onClick={() => showClimateToast('🌡️ Recalibrated all IoT climate sensors successfully.')}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+            >
+              Recalibrate All Sensors
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {climateZones.map((zone, idx) => (
+              <div key={idx} className={`bg-white rounded-2xl p-6 shadow-sm border ${zone.status === 'Warning' ? 'border-red-300 bg-red-50/20' : 'border-gray-200'} flex flex-col justify-between gap-4`}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-xs font-mono font-bold text-gray-400">{zone.sensorId}</span>
+                    <h4 className="font-bold text-gray-900 mt-1">{zone.name}</h4>
+                  </div>
+                  <span className={`text-[10px] uppercase font-black px-2 py-1 rounded-full ${
+                    zone.status === 'Warning' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-green-100 text-green-700'
+                  }`}>
+                    {zone.status}
+                  </span>
+                </div>
+
+                <div className="space-y-3 py-2">
+                  <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <span className="text-xs text-gray-500 font-semibold">Temperature</span>
+                    <span className={`text-lg font-mono font-black ${zone.status === 'Warning' ? 'text-red-600' : 'text-gray-950'}`}>
+                      {zone.temp}°C
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <span className="text-xs text-gray-500 font-semibold">Humidity</span>
+                    <span className="text-base font-mono font-bold text-gray-900">
+                      {zone.humidity}% RH
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 flex justify-between">
+                    <span>Threshold Limit:</span>
+                    <strong className="text-gray-800">{zone.threshold}</strong>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-100 flex gap-2">
+                  <button
+                    onClick={() => showClimateToast(`🔧 Dispatched HVAC technician to ${zone.name}.`)}
+                    className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition-colors"
+                  >
+                    Dispatch Tech
+                  </button>
+                  {zone.status === 'Warning' && (
+                    <button
+                      onClick={() => {
+                        const updated = [...climateZones];
+                        updated[idx].status = 'Optimal';
+                        updated[idx].temp = 23.5;
+                        setClimateZones(updated);
+                        showClimateToast(`✅ Resolved warning for ${zone.name}. Climate stabilized.`);
+                      }}
+                      className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors"
+                    >
+                      Ventilate
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

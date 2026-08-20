@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { fetchApi } from '../lib/api.ts';
-import { BookOpen, Info, Plus, Search, Trash2, X, FileText, ChevronLeft, ChevronRight, Stamp, CheckCircle2 } from 'lucide-react';
+import { BookOpen, Info, Plus, Search, Trash2, X, FileText, ChevronLeft, ChevronRight, Stamp, CheckCircle2, Truck } from 'lucide-react';
+import { InterHubTransferSection } from './InterHubTransferSection';
 
 export function CatalogScreen() {
+  const [activeTab, setActiveTab] = useState<'catalog' | 'sto'>('catalog');
   const [catalog, setCatalog] = useState<any[]>([]);
   const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -79,19 +81,49 @@ export function CatalogScreen() {
 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Master Catalog & Vendor Inventory</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage {totalItems.toLocaleString('en-IN')}+ items across all categories & seller agreements</p>
+          <h2 className="text-2xl font-bold text-gray-900">Master Catalog & Inter-Hub WMS</h2>
+          <p className="text-sm text-gray-500 mt-1">Manage items across all categories, seller agreements, and inter-facility stock transfers</p>
         </div>
-        <button 
-          onClick={openNew}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors shadow-sm"
+        {activeTab === 'catalog' && (
+          <button 
+            onClick={openNew}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Plus size={16} /> Onboard New Item & Seller
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('catalog')}
+          className={`flex items-center gap-2 px-6 py-3 font-bold text-sm border-b-2 transition-colors ${
+            activeTab === 'catalog'
+              ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
         >
-          <Plus size={16} /> Onboard New Item & Seller
+          <BookOpen size={18} /> Master Catalog & Vendors
+        </button>
+        <button
+          onClick={() => setActiveTab('sto')}
+          className={`flex items-center gap-2 px-6 py-3 font-bold text-sm border-b-2 transition-colors ${
+            activeTab === 'sto'
+              ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Truck size={18} /> Inter-Hub Transfers (STO)
         </button>
       </div>
 
-      {/* Table Controls */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+      {activeTab === 'sto' ? (
+        <InterHubTransferSection />
+      ) : (
+        <>
+          {/* Table Controls */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between bg-gray-50/50 gap-4">
           <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -184,6 +216,8 @@ export function CatalogScreen() {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Add New Item Modal */}
       {isModalOpen && (

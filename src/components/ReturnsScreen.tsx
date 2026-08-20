@@ -1,96 +1,226 @@
-import React, { useEffect, useState } from 'react';
-import { fetchApi } from '../lib/api.ts';
-import { RotateCcw, CheckSquare, XSquare } from 'lucide-react';
+import React, { useState } from 'react';
+import { RotateCcw, ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Camera, Package, ArrowRight, RefreshCw, FileText } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export function ReturnsScreen() {
-  const [returns, setReturns] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [returnId, setReturnId] = useState('');
+  const mockReturns = [
+    { id: 'RET-99218', awb: 'AWB-8349281X', item: 'Meesho Women Ethnic Kurti', customer: 'Pooja Verma', reason: 'Size too large / Fit issue', date: '2026-08-19' },
+    { id: 'RET-99219', awb: 'AWB-1122334X', item: 'Cotton Printed Bedsheet Set', customer: 'Rahul Sharma', reason: 'Defective Stitching', date: '2026-08-19' },
+    { id: 'RET-99220', awb: 'AWB-5566778Y', item: 'Stainless Steel Water Bottle', customer: 'Sneha Gupta', reason: 'Incorrect Item Received', date: '2026-08-18' },
+  ];
 
-  const fetchReturns = async () => {
-    try {
-      const data = await fetchApi('/returns');
-      setReturns(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+  const [selectedReturn, setSelectedReturn] = useState<any>(mockReturns[0]);
+  const [qcStatus, setQcStatus] = useState<string | null>(null);
+  const [qcNotes, setQcNotes] = useState('');
+  const [photoCaptured, setPhotoCaptured] = useState(false);
+  const [restockBin, setRestockBin] = useState<string | null>(null);
+
+  const handleSelectReturn = (ret: any) => {
+    setSelectedReturn(ret);
+    setQcStatus(null);
+    setQcNotes('');
+    setPhotoCaptured(false);
+    setRestockBin(null);
+  };
+
+  const handleCompleteQC = (status: string) => {
+    setQcStatus(status);
+    if (status === 'Pass' || status === 'Refurbish') {
+      setRestockBin('Bin-A12-QuickRestock');
+    } else if (status === 'Damaged') {
+      setRestockBin('Bin-Z99-RTV-Liquidate');
+    } else {
+      setRestockBin('Bin-Q05-DiscrepancyQuarantine');
     }
   };
 
-  useEffect(() => {
-    fetchReturns();
-  }, []);
-
-  const handleAction = async (id: number, action: string) => {
-    await fetchApi(`/returns/${id}/action`, { 
-      method: 'POST',
-      body: JSON.stringify({ action })
+  const generateQCCertificate = () => {
+    if (!selectedReturn) return;
+    const doc = new jsPDF();
+    doc.text('Meesho Reverse Logistics - Quality Check Certificate', 14, 20);
+    doc.setFontSize(10);
+    doc.text(`Return ID: ${selectedReturn.id}`, 14, 30);
+    doc.text(`AWB / Order: ${selectedReturn.awb}`, 14, 36);
+    doc.text(`Item: ${selectedReturn.item}`, 14, 42);
+    doc.text(`Customer Reason: ${selectedReturn.reason}`, 14, 48);
+    doc.text(`QC Status Result: ${qcStatus}`, 14, 56);
+    doc.text(`Assigned Restock Bin: ${restockBin}`, 14, 62);
+    doc.text(`Timestamp: ${new Date().toLocaleString()}`, 14, 68);
+    
+    autoTable(doc, {
+      startY: 75,
+      head: [['Inspection Parameter', 'Result', 'Notes']],
+      body: [
+        ['Packaging Integrity', qcStatus === 'Pass' ? 'Passed' : 'Failed', qcNotes || 'Standard inspection'],
+        ['Tag & Barcode Scan', 'Matched', 'Valid SKU verified'],
+        ['Physical Defect Check', qcStatus, 'Inspected via AI Camera & Inspector'],
+      ]
     });
-    fetchReturns();
+    
+    doc.save(`QC_Certificate_${selectedReturn.id}.pdf`);
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Returns & RTO</h2>
-        <p className="text-sm text-gray-500 mt-1">Manage customer returns and RTO inspections</p>
+    <div className="space-y-6 animate-in fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Return to Origin (RTO) & Reverse Logistics QC</h2>
+          <p className="text-sm text-gray-500 mt-1">Inspect customer returns, grade item condition, and assign automated restocking bins</p>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 text-xs font-semibold tracking-wide text-gray-500 uppercase border-b border-gray-100">
-              <th className="px-6 py-4">RMA / Order ID</th>
-              <th className="px-6 py-4">SKU</th>
-              <th className="px-6 py-4">Reason</th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4 text-right">Inspection</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 text-sm">
-            {loading ? (
-              <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Loading...</td></tr>
-            ) : returns.length === 0 ? (
-              <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">No pending returns found.</td></tr>
-            ) : returns.map((ret, i) => (
-              <tr key={i} className="hover:bg-gray-50">
-                <td className="px-6 py-4">
-                  <div className="font-bold text-gray-900">{ret.rmaId}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{ret.meeshoOrderId}</div>
-                </td>
-                <td className="px-6 py-4 font-medium text-gray-700">{ret.sku}</td>
-                <td className="px-6 py-4 text-gray-600">{ret.reason}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
-                    ret.status === 'Restocked' ? 'bg-green-100 text-green-700' : 
-                    ret.status === 'Liquidated' ? 'bg-red-100 text-red-700' :
-                    'bg-yellow-100 text-yellow-700'
-                  }`}>
-                    {ret.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right space-x-2">
-                  {ret.status === 'Pending Inspection' && (
-                    <>
-                      <button 
-                        onClick={() => handleAction(ret.id, 'Restock')}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium text-xs hover:bg-green-700 transition-colors"
-                      >
-                        <CheckSquare size={14} /> Restock
-                      </button>
-                      <button 
-                        onClick={() => handleAction(ret.id, 'Liquidate')}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg font-medium text-xs hover:bg-red-700 transition-colors"
-                      >
-                        <XSquare size={14} /> Liquidate
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Pending Returns Queue */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col">
+          <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center justify-between">
+            <span>Pending Returns Queue</span>
+            <span className="bg-pink-50 text-[#f43397] px-2 py-0.5 rounded-full text-xs font-bold">{mockReturns.length}</span>
+          </h3>
+          <div className="space-y-3 flex-1 overflow-y-auto">
+            {mockReturns.map(ret => (
+              <div 
+                key={ret.id}
+                onClick={() => handleSelectReturn(ret)}
+                className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                  selectedReturn?.id === ret.id ? 'border-[#f43397] bg-pink-50/50 shadow-sm' : 'border-gray-100 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <span className="font-bold text-gray-900 text-sm">{ret.id}</span>
+                  <span className="text-xs font-mono text-gray-500">{ret.date}</span>
+                </div>
+                <p className="text-xs font-semibold text-gray-800 line-clamp-1">{ret.item}</p>
+                <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500">
+                  <span>Reason: <strong className="text-gray-700">{ret.reason}</strong></span>
+                  <span className="font-mono text-[#f43397] font-bold">{ret.awb}</span>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
+
+        {/* Quality Check Inspection Workbench */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col">
+          <h3 className="text-base font-bold text-gray-900 mb-4">Inspection & QC Workbench</h3>
+          {selectedReturn ? (
+            <div className="space-y-6">
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Selected Item</p>
+                  <p className="font-bold text-gray-900">{selectedReturn.item}</p>
+                  <p className="text-xs font-mono text-gray-500 mt-0.5">AWB: {selectedReturn.awb}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Customer Reported Reason</p>
+                  <p className="font-semibold text-orange-600 bg-orange-50 px-2 py-1 rounded inline-block mt-1 text-xs">{selectedReturn.reason}</p>
+                </div>
+              </div>
+
+              {/* Photo Simulation */}
+              <div>
+                <p className="text-sm font-bold text-gray-800 mb-2">Item Condition Photo Capture</p>
+                <div className="flex items-center gap-4">
+                  <div className="w-32 h-24 bg-gray-100 rounded-xl border border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
+                    {photoCaptured ? (
+                      <div className="absolute inset-0 bg-pink-50 flex flex-col items-center justify-center text-[#f43397]">
+                        <CheckCircle2 size={24} />
+                        <span className="text-[10px] font-bold mt-1">Captured OK</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Camera size={24} className="mb-1" />
+                        <span className="text-[10px]">No Photo</span>
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <button 
+                      onClick={() => setPhotoCaptured(true)}
+                      className="px-4 py-2 bg-gray-900 text-white rounded-lg text-xs font-semibold hover:bg-gray-800 transition-colors shadow-sm"
+                    >
+                      {photoCaptured ? 'Retake Inspection Photo' : 'Capture Item Photo'}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">AI automatically inspects packaging tags and physical defects.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* QC Decision Buttons */}
+              <div>
+                <p className="text-sm font-bold text-gray-800 mb-2">Assign Quality Grade</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <button 
+                    onClick={() => handleCompleteQC('Pass')}
+                    className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
+                      qcStatus === 'Pass' ? 'bg-green-600 text-white border-green-600 shadow-md' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                    }`}
+                  >
+                    <CheckCircle2 size={18} /> Pass / Like New
+                  </button>
+                  <button 
+                    onClick={() => handleCompleteQC('Refurbish')}
+                    className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
+                      qcStatus === 'Refurbish' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                    }`}
+                  >
+                    <RefreshCw size={18} /> Refurbish
+                  </button>
+                  <button 
+                    onClick={() => handleCompleteQC('Damaged')}
+                    className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
+                      qcStatus === 'Damaged' ? 'bg-red-600 text-white border-red-600 shadow-md' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
+                  >
+                    <XCircle size={18} /> Damaged / RTV
+                  </button>
+                  <button 
+                    onClick={() => handleCompleteQC('Incorrect Item')}
+                    className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all flex flex-col items-center gap-1 ${
+                      qcStatus === 'Incorrect Item' ? 'bg-orange-600 text-white border-orange-600 shadow-md' : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
+                    }`}
+                  >
+                    <AlertTriangle size={18} /> Incorrect Item
+                  </button>
+                </div>
+              </div>
+
+              {/* Inspector Notes */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Inspector Notes</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter remarks (e.g. minor box tear, seal intact)..."
+                  value={qcNotes}
+                  onChange={e => setQcNotes(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#f43397]"
+                />
+              </div>
+
+              {/* Restock Recommendation & Certificate */}
+              {qcStatus && (
+                <div className="bg-pink-50/60 border border-pink-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in">
+                  <div>
+                    <span className="text-xs font-bold text-pink-600 uppercase tracking-widest">Automated System Recommendation</span>
+                    <p className="text-sm font-bold text-gray-900 mt-0.5">Route to Restock Bin: <span className="font-mono text-pink-700">{restockBin}</span></p>
+                  </div>
+                  <button 
+                    onClick={generateQCCertificate}
+                    className="px-4 py-2 bg-[#f43397] text-white rounded-lg font-bold text-xs hover:bg-pink-700 transition-colors shadow-sm flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <FileText size={16} /> Export QC Certificate PDF
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-gray-400">
+              <RotateCcw size={48} className="mb-3 text-gray-300 animate-spin" />
+              <p className="text-sm font-semibold text-gray-600">Select a return item from the queue to initiate QC inspection</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
