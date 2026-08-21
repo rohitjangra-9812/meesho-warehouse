@@ -138,7 +138,7 @@ const [activeTab, setActiveTab] = useState<'slotting' | 'routing' | 'vision' | '
         <div className="flex flex-wrap bg-gray-100 p-1 rounded-lg gap-1 mt-4 xl:mt-0 xl:max-w-[65%] justify-end">
           <button 
             onClick={() => setActiveTab('slotting')}
-            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors flex items-center gap-2 \${
+            className={`px-6 py-2 text-sm font-semibold rounded-md transition-colors flex items-center gap-2 ${
               activeTab === 'slotting' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >

@@ -17,16 +17,27 @@ export function ReturnsScreen() {
   const [photoCaptured, setPhotoCaptured] = useState(false);
   const [restockBin, setRestockBin] = useState<string | null>(null);
 
+  // 3-step QC Checklist state
+  const [step1Package, setStep1Package] = useState<'Pass' | 'Damaged' | 'Tampered'>('Pass');
+  const [step2SkuTag, setStep2SkuTag] = useState<'Matched' | 'Mismatched' | 'Missing'>('Matched');
+  const [step3Weight, setStep3Weight] = useState<'Match' | 'Variance'>('Match');
+  const [liquidizeTag, setLiquidizeTag] = useState<'Restockable (Zone A)' | 'Liquidate (B2B RTV)' | 'Refurbish' | 'Quarantine'>('Restockable (Zone A)');
+
   const handleSelectReturn = (ret: any) => {
     setSelectedReturn(ret);
     setQcStatus(null);
     setQcNotes('');
     setPhotoCaptured(false);
     setRestockBin(null);
+    setStep1Package('Pass');
+    setStep2SkuTag('Matched');
+    setStep3Weight('Match');
+    setLiquidizeTag('Restockable (Zone A)');
   };
 
-  const handleCompleteQC = (status: string) => {
+  const handleCompleteQC = (status: string, tag?: string) => {
     setQcStatus(status);
+    if (tag) setLiquidizeTag(tag as any);
     if (status === 'Pass' || status === 'Refurbish') {
       setRestockBin('Bin-A12-QuickRestock');
     } else if (status === 'Damaged') {
@@ -143,6 +154,50 @@ export function ReturnsScreen() {
                       {photoCaptured ? 'Retake Inspection Photo' : 'Capture Item Photo'}
                     </button>
                     <p className="text-xs text-gray-500 mt-2">AI automatically inspects packaging tags and physical defects.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3-Step QC Inspection Checklist */}
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
+                <p className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                  <ShieldCheck size={16} className="text-[#f43397]" /> 3-Step QC Inspection Checklist
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-white p-3 rounded-lg border border-gray-200">
+                    <span className="font-semibold text-gray-500 block mb-1">1. Package Condition</span>
+                    <select 
+                      value={step1Package} 
+                      onChange={e => setStep1Package(e.target.value as any)}
+                      className="w-full p-1.5 border rounded font-medium text-gray-800 bg-gray-50"
+                    >
+                      <option value="Pass">Pass / Intact Box</option>
+                      <option value="Damaged">Damaged / Torn</option>
+                      <option value="Tampered">Tampered Seal</option>
+                    </select>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-gray-200">
+                    <span className="font-semibold text-gray-500 block mb-1">2. SKU Tag Verification</span>
+                    <select 
+                      value={step2SkuTag} 
+                      onChange={e => setStep2SkuTag(e.target.value as any)}
+                      className="w-full p-1.5 border rounded font-medium text-gray-800 bg-gray-50"
+                    >
+                      <option value="Matched">Matched Barcode</option>
+                      <option value="Mismatched">Mismatched SKU</option>
+                      <option value="Missing">Missing Barcode</option>
+                    </select>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-gray-200">
+                    <span className="font-semibold text-gray-500 block mb-1">3. Weight Check (1.2 kg)</span>
+                    <select 
+                      value={step3Weight} 
+                      onChange={e => setStep3Weight(e.target.value as any)}
+                      className="w-full p-1.5 border rounded font-medium text-gray-800 bg-gray-50"
+                    >
+                      <option value="Match">Exact Match (±0.05kg)</option>
+                      <option value="Variance">Weight Variance (&gt;15%)</option>
+                    </select>
                   </div>
                 </div>
               </div>

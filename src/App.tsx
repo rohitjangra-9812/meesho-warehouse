@@ -11,8 +11,22 @@ import {
   Search, 
   ScanLine,
   LogOut,
-  X
-, Landmark, Users, BookOpen, Truck, BrainCircuit, ScanBarcode , Shield, FileBarChart, RefreshCw, Siren } from "lucide-react";
+  X,
+  Landmark, 
+  Users, 
+  BookOpen, 
+  Truck, 
+  BrainCircuit, 
+  ScanBarcode, 
+  Shield, 
+  FileBarChart, 
+  RefreshCw, 
+  Siren,
+  UtensilsCrossed,
+  ShieldCheck,
+  KeyRound,
+  Lock
+} from "lucide-react";
 import { setApiToken, fetchApi } from './lib/api.ts';
 import { LoginScreen } from './components/LoginScreen';
 import { DashboardScreen } from './components/DashboardScreen';
@@ -30,7 +44,12 @@ import { ScannerScreen } from './components/ScannerScreen';
 import { LeadershipScreen } from './components/LeadershipScreen';
 import { SurveillanceScreen } from './components/SurveillanceScreen';
 import { ReportsScreen } from './components/ReportsScreen';
+import { CanteenScreen } from './components/CanteenScreen';
 import { SafetyIncidentModal } from './components/SafetyIncidentModal';
+import { AdminPanel } from './components/AdminPanel';
+import { AdminLoginModal } from './components/AdminLoginModal';
+import { MaintenanceProvider } from './lib/maintenance';
+import { MaintenanceBanner, MaintenanceClockWidget } from './components/MaintenanceBanner';
 
 
 export const AuthContext = createContext<{ isAuthenticated: boolean; checkAuth: () => void }>({ 
@@ -62,10 +81,46 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const [isAdmin, setIsAdmin] = useState(localStorage.getItem('meesho_admin_token') === 'true');
+  const [isModalOpen, setIsModalOpen] = useState(!isAdmin);
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 space-y-4">
+        <div className="w-16 h-16 rounded-3xl bg-pink-100 text-[#f43397] flex items-center justify-center shadow-md">
+          <Shield size={32} />
+        </div>
+        <h2 className="text-2xl font-black text-gray-900 tracking-tight">Admin Authentication Required</h2>
+        <p className="text-sm text-gray-600 max-w-md mx-auto">
+          Access to the Enterprise Control Panel requires master administrator clearance. Please authenticate below.
+        </p>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="px-6 py-3 bg-[#f43397] hover:bg-[#d82481] text-white font-black text-sm rounded-xl shadow-lg transition-all flex items-center gap-2"
+        >
+          <KeyRound size={16} />
+          <span>Open Admin Login Gateway</span>
+        </button>
+        <AdminLoginModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onLoginSuccess={() => {
+            setIsAdmin(true);
+            setIsModalOpen(false);
+          }}
+        />
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Landmark, label: 'Banking', path: '/banking' },
   { icon: Users, label: 'Employees', path: '/employees' },
+  { icon: UtensilsCrossed, label: 'Canteen & Meals', path: '/canteen' },
   { icon: Shield, label: 'Leadership', path: '/leadership' },
   { icon: BookOpen, label: 'Catalog', path: '/catalog' },
   { icon: Truck, label: 'Docks', path: '/docks' },
@@ -81,6 +136,32 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+
+  const [isAdminAuth, setIsAdminAuth] = useState(localStorage.getItem('meesho_admin_token') === 'true');
+  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
+  const [logoClicks, setLogoClicks] = useState(0);
+
+  // Secret shortcut: Ctrl + Shift + A or 5 clicks on logo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setIsAdminLoginModalOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleLogoClick = () => {
+    const newCount = logoClicks + 1;
+    setLogoClicks(newCount);
+    if (newCount >= 5) {
+      setLogoClicks(0);
+      setIsAdminLoginModalOpen(true);
+    }
+    setTimeout(() => setLogoClicks(0), 3000);
+  };
 
   const logout = () => {
     localStorage.removeItem('secret_pin');
@@ -116,12 +197,12 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
     try {
       setIsSimulating(true);
       const res = await fetchApi('/system/stream-tick', { method: 'POST' });
-      setStreamMessage(res.message || 'Simulated 10-Min Tick (+20 entries) executed!');
-      setTimeout(() => setStreamMessage(null), 5000);
-      window.dispatchEvent(new Event('wms-data-updated'));
+      setStreamMessage(res.message || '10-Min Influx Engine executed successfully (+20 records across all modules)!');
+      setTimeout(() => setStreamMessage(null), 6000);
+      window.dispatchEvent(new CustomEvent('wms-data-updated', { detail: res }));
     } catch (err) {
       console.error(err);
-      alert('Failed to simulate stream tick');
+      alert('Failed to simulate 10-min stream tick');
     } finally {
       setIsSimulating(false);
     }
@@ -131,7 +212,11 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-gray-50 font-sans">
       {/* Sidebar */}
       <aside className="hidden md:flex w-64 flex-col bg-white border-r border-gray-200 z-20">
-        <div className="p-6 border-b border-gray-200 flex items-center gap-3 bg-gradient-to-br from-pink-50/50 to-white">
+        <div 
+          onClick={handleLogoClick}
+          className="p-6 border-b border-gray-200 flex items-center gap-3 bg-gradient-to-br from-pink-50/50 to-white cursor-pointer select-none"
+          title="Click 5 times for administrative gateway"
+        >
           <MeeshoLogo size={36} />
           <div>
             <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none flex items-center gap-1.5">
@@ -202,6 +287,7 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="relative z-10 flex flex-col h-full w-full">
+        <MaintenanceBanner />
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between z-10 gap-4 shadow-sm">
           <div className="flex items-center gap-3 sm:hidden">
              <MeeshoLogo size={32} />
@@ -252,10 +338,10 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
               onClick={handleSimulateTick}
               disabled={isSimulating}
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-bold bg-[#f43397] hover:bg-[#d82481] text-white transition-colors shadow-sm whitespace-nowrap"
-              title="Simulate 5-Minute Automated Data Stream Tick (+20 Entries)"
+              title="Simulate 10-Minute Periodic Influx (+20 Live Records across all modules)"
             >
               <RefreshCw size={14} className={isSimulating ? 'animate-spin' : ''} />
-              <span>{isSimulating ? 'Ingesting...' : 'Simulate 5-Min Tick (+20)'}</span>
+              <span>{isSimulating ? 'Ingesting Influx...' : 'Simulate 10-Min Tick (+20 Data)'}</span>
             </button>
             <button
               onClick={() => setIsSafetyModalOpen(true)}
@@ -265,25 +351,36 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
               <Siren size={16} />
               <span>🚨 SOS</span>
             </button>
+            <MaintenanceClockWidget />
           </div>
 
           {/* User Session & IP Metadata Badge */}
           <div className="hidden xl:flex items-center gap-3 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl text-xs">
+            {isAdminAuth && (
+              <div className="flex items-center gap-2 bg-pink-50 border border-pink-200 px-3 py-1.5 rounded-xl">
+                <span className="w-2 h-2 rounded-full bg-[#f43397] animate-pulse"></span>
+                <span className="font-black text-[#f43397]">Admin Active</span>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('meesho_admin_token');
+                    setIsAdminAuth(false);
+                    window.location.reload();
+                  }}
+                  className="ml-2 px-2 py-0.5 bg-gray-900 text-white rounded text-[10px] font-bold"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-col text-right">
-              <span className="font-bold text-gray-900">meesho_admin <span className="text-[10px] text-gray-500 font-normal">(Operations Supervisor)</span></span>
-              <span className="text-[10px] font-mono text-gray-500">IP: 192.168.1.104 | TERMINAL-FC-BLR-04</span>
+              <span className="font-bold text-gray-900">meesho_admin <span className="text-[10px] text-gray-500 font-normal">(Operations)</span></span>
+              <span className="text-[10px] font-mono text-gray-500">IP: 192.168.1.104</span>
             </div>
             <div className="h-6 w-px bg-gray-200"></div>
-            <div className="flex flex-col">
-              <span className="font-bold text-emerald-600 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                ⚡ 24ms | TLS 1.3
-              </span>
-              <span className="text-[10px] font-semibold text-gray-600">Shift: Morning A | Active: {sessionDuration}</span>
-            </div>
             <button
               onClick={logout}
-              className="ml-2 p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
+              className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
               title="Logout / Switch Station"
             >
               <LogOut size={14} />
@@ -310,30 +407,43 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
       </main>
 
       <SafetyIncidentModal isOpen={isSafetyModalOpen} onClose={() => setIsSafetyModalOpen(false)} />
+      <AdminLoginModal
+        isOpen={isAdminLoginModalOpen}
+        onClose={() => setIsAdminLoginModalOpen(false)}
+        onLoginSuccess={() => {
+          setIsAdminAuth(true);
+          window.location.href = '/admin';
+        }}
+      />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginScreen />} />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout><DashboardScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/banking" element={<ProtectedRoute><DashboardLayout><BankingScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/employees" element={<ProtectedRoute><DashboardLayout><EmployeeScreen /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/leadership" element={<ProtectedRoute><DashboardLayout><LeadershipScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/catalog" element={<ProtectedRoute><DashboardLayout><CatalogScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/docks" element={<ProtectedRoute><DashboardLayout><DockScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/ai-operations" element={<ProtectedRoute><DashboardLayout><AIOperationsScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/scanner" element={<ProtectedRoute><DashboardLayout><ScannerScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/cctv" element={<ProtectedRoute><DashboardLayout><SurveillanceScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/reports" element={<ProtectedRoute><DashboardLayout><ReportsScreen /></DashboardLayout></ProtectedRoute>} />
-          <Route path="/returns" element={<ProtectedRoute><DashboardLayout><ReturnsScreen /></DashboardLayout></ProtectedRoute>} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <MaintenanceProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginScreen />} />
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout><DashboardScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/banking" element={<ProtectedRoute><DashboardLayout><BankingScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/employees" element={<ProtectedRoute><DashboardLayout><EmployeeScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/canteen" element={<ProtectedRoute><DashboardLayout><CanteenScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/leadership" element={<ProtectedRoute><DashboardLayout><LeadershipScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/catalog" element={<ProtectedRoute><DashboardLayout><CatalogScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/docks" element={<ProtectedRoute><DashboardLayout><DockScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/ai-operations" element={<ProtectedRoute><DashboardLayout><AIOperationsScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/scanner" element={<ProtectedRoute><DashboardLayout><ScannerScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/cctv" element={<ProtectedRoute><DashboardLayout><SurveillanceScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute><DashboardLayout><ReportsScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/returns" element={<ProtectedRoute><DashboardLayout><ReturnsScreen /></DashboardLayout></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><DashboardLayout><AdminRoute><AdminPanel /></AdminRoute></DashboardLayout></ProtectedRoute>} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </MaintenanceProvider>
   );
 }
+

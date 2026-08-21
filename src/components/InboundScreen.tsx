@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { fetchApi } from '../lib/api.ts';
+import { useMaintenance } from '../lib/maintenance';
 import { Download, ArrowDownToLine, PackagePlus } from 'lucide-react';
 
 export function InboundScreen() {
+  const { checkAndBlockAction } = useMaintenance();
   const [shipments, setShipments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -22,6 +24,9 @@ export function InboundScreen() {
   }, []);
 
   const handleReceive = async (id: number) => {
+    if (checkAndBlockAction("Inbound GRN Receiving")) {
+      return;
+    }
     await fetchApi(`/inbound/${id}/receive`, { method: 'POST' });
     fetchShipments();
   };

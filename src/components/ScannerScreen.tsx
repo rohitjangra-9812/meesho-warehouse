@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useMaintenance } from '../lib/maintenance';
 import { 
   ScanLine, ScanBarcode, PackageSearch, CheckCircle2, XCircle, AlertTriangle, 
   Activity, Users, BatteryMedium, Cpu, Search, Fingerprint, Zap, ArrowRight,
@@ -6,6 +7,7 @@ import {
 } from 'lucide-react';
 
 export function ScannerScreen() {
+  const { isMaintenance, checkAndBlockAction } = useMaintenance();
   const [activeTab, setActiveTab] = useState<'scanner' | 'putwall'>('scanner');
   const [scanInput, setScanInput] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -32,6 +34,9 @@ export function ScannerScreen() {
   };
 
   const handlePutwallScan = (cubbyId: string) => {
+    if (checkAndBlockAction("Put-wall sortation & item assignment")) {
+      return;
+    }
     setActiveIlluminatedCubby(cubbyId);
     setCubbies(prev => prev.map(c => {
       if (c.id === cubbyId) {
@@ -55,6 +60,15 @@ export function ScannerScreen() {
     { id: 4, time: '10:38:55 AM', station: 'ST-01', operator: 'Vikram Singh', code: 'SKU-FASH-118', action: 'Inbound GRN', status: 'Damaged' },
     { id: 5, time: '10:35:10 AM', station: 'ST-04', operator: 'Raj Patel', code: 'AWB-1122334X', action: 'Wave Pick', status: 'Success' },
   ]);
+
+  // Smart Pick-Path Routing state
+  const [pickPath, setPickPath] = useState([
+    { step: 1, zone: 'Zone-A', aisle: 'Aisle-04', shelf: 'Shelf-02', bin: 'Bin-B12', sku: 'SKU-ELECT-092', qty: 5, status: 'Completed' },
+    { step: 2, zone: 'Zone-A', aisle: 'Aisle-04', shelf: 'Shelf-04', bin: 'Bin-C08', sku: 'SKU-FASH-88', qty: 3, status: 'Active' },
+    { step: 3, zone: 'Zone-B', aisle: 'Aisle-01', shelf: 'Shelf-01', bin: 'Bin-A01', sku: 'SKU-HOME-10', qty: 2, status: 'Pending' },
+    { step: 4, zone: 'Zone-C', aisle: 'Aisle-03', shelf: 'Shelf-05', bin: 'Bin-D22', sku: 'SKU-COSM-331', qty: 4, status: 'Pending' },
+  ]);
+  const [mismatchAlert, setMismatchAlert] = useState<string | null>(null);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -79,6 +93,25 @@ export function ScannerScreen() {
     }
   };
 
+  const playErrorBeep = () => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {}
+  };
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -90,15 +123,27 @@ export function ScannerScreen() {
 
   const handleScanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (checkAndBlockAction("Barcode scanning & validation")) {
+      return;
+    }
     if (!scanInput.trim()) return;
     
-    playBeep();
+    const activeStep = pickPath.find(p => p.status === 'Active');
+    const isMismatch = scanInput.includes('ERR') || (activeStep && !scanInput.toUpperCase().includes('SKU') && !scanInput.toUpperCase().includes('AWB'));
+    
+    if (isMismatch) {
+      playErrorBeep();
+      setMismatchAlert(`⚠️ MISMATCH WARNING: Scanned code "${scanInput.toUpperCase()}" does not match active bin target (${activeStep?.zone} -> ${activeStep?.bin} for ${activeStep?.sku})!`);
+      setTimeout(() => setMismatchAlert(null), 6000);
+    } else {
+      playBeep();
+    }
+
     setIsScanning(true);
     setScanResult(null);
     
     setTimeout(() => {
       const isDamaged = scanInput.includes('DAM');
-      const isMismatch = scanInput.includes('ERR');
       let status = 'Success';
       let statusColor = 'text-green-600 bg-green-50 border-green-200';
       let icon = <CheckCircle2 className="text-green-500 w-16 h-16" />;
@@ -121,8 +166,8 @@ export function ScannerScreen() {
         details: {
           category: isDamaged ? 'Flagged / Needs QC' : 'Electronics / Consumer',
           weight: '1.2 kg',
-          targetBin: isMismatch ? 'HOLDING AREA' : 'Zone A / Rack 4',
-          action: 'Inbound GRN'
+          targetBin: isMismatch ? 'HOLDING AREA' : (activeStep ? `${activeStep.zone} / ${activeStep.aisle} / ${activeStep.shelf} / ${activeStep.bin}` : 'Zone A / Rack 4'),
+          action: 'Pick-Path Route'
         }
       };
       
@@ -135,7 +180,7 @@ export function ScannerScreen() {
         station: 'ST-04 (Active)',
         operator: 'Current User',
         code: scanInput.toUpperCase(),
-        action: 'Inbound GRN',
+        action: 'Pick-Path Route',
         status: status
       }, ...prev].slice(0, 15));
       
@@ -285,6 +330,40 @@ export function ScannerScreen() {
               </div>
               
               <div className="p-6 flex-1 flex flex-col bg-gray-50">
+                {mismatchAlert && (
+                  <div className="mb-4 bg-red-600 text-white p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-bounce shadow-lg">
+                    <XCircle size={18} className="shrink-0" />
+                    <span>{mismatchAlert}</span>
+                  </div>
+                )}
+
+                {/* Smart Pick-Path Routing Navigation Bar */}
+                <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <Target size={14} className="text-blue-600" /> Smart Pick-Path Navigator
+                    </span>
+                    <span className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                      Optimized Path
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs">
+                    {pickPath.map((step, idx) => (
+                      <div key={idx} className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border shrink-0 ${
+                        step.status === 'Active' ? 'bg-blue-600 text-white border-blue-700 font-bold shadow-sm' :
+                        step.status === 'Completed' ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-medium' :
+                        'bg-white text-gray-500 border-gray-200'
+                      }`}>
+                        <span>{step.zone}</span>
+                        <ArrowRight size={10} className="opacity-60" />
+                        <span>{step.aisle}</span>
+                        <ArrowRight size={10} className="opacity-60" />
+                        <span className="font-mono text-[11px] underline">{step.bin}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <form onSubmit={handleScanSubmit} className="relative mb-6">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2">
                     {isScanning ? <ScanLine className="animate-pulse text-blue-500" /> : <Fingerprint className="text-gray-400" />}

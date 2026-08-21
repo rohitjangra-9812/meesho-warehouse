@@ -3,7 +3,8 @@ import { fetchApi } from '../lib/api.ts';
 import { 
   Activity, Package, ArrowUpRight, ArrowDownRight, Truck, LayoutGrid, List, 
   AlertTriangle, Wrench, ShieldAlert, Clock, Download, Megaphone, Zap, 
-  Play, Square, CheckCircle2, BarChart3, Layers, Send, TrendingUp, AlertOctagon
+  Play, Square, CheckCircle2, BarChart3, Layers, Send, TrendingUp, AlertOctagon, X,
+  ShieldCheck, Lock
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar 
@@ -44,9 +45,11 @@ export function DashboardScreen() {
   const [viewMode, setViewMode] = useState<'overview' | 'floorplan'>('overview');
   const [chartTimeframe, setChartTimeframe] = useState<'Today' | '7 Days' | '30 Days'>('Today');
   
-  // Auto-Refresh & Time Drift Engine State
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(300000); // 5 min default
+  // 10-Minute Periodic Influx & Auto-Refresh State
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(600000); // 10 min default
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(600);
   const [lastSyncedTime, setLastSyncedTime] = useState<string>(new Date().toLocaleTimeString());
+  const [storageCapacity, setStorageCapacity] = useState<number>(84.5);
 
   const [throughputTodayState, setThroughputTodayState] = useState([
     { time: '06:00', inbound: 420, outbound: 210 },
@@ -73,6 +76,10 @@ export function DashboardScreen() {
   const [announcementText, setAnnouncementText] = useState('');
   const [handoverModalOpen, setHandoverModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Scheduled Maintenance Banner State
+  const [showMaintenanceNotice, setShowMaintenanceNotice] = useState(true);
+  const [expandMaintenanceReason, setExpandMaintenanceReason] = useState(true);
 
   // Express SLA Watchlist state
   const [watchlist, setWatchlist] = useState([
@@ -115,70 +122,157 @@ export function DashboardScreen() {
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
-  const executeRefreshTick = () => {
-    // 1. Shift throughput time buckets & append new volume with variance
-    setThroughputTodayState(prev => {
-      const newArr = [...prev.slice(1)];
-      const lastHour = prev[prev.length - 1].time;
-      const nextHourNum = (parseInt(lastHour.split(':')[0]) + 2) % 24;
-      const nextHourStr = String(nextHourNum).padStart(2, '0') + ':00';
-      newArr.push({
-        time: nextHourStr,
-        inbound: Math.floor(450 + Math.random() * 1150),
-        outbound: Math.floor(550 + Math.random() * 1350)
+  const executeRefreshTick = async (customPayload?: any) => {
+    try {
+      // 1. Shift throughput time buckets & append new volume with variance
+      setThroughputTodayState(prev => {
+        const newArr = [...prev.slice(1)];
+        const lastHour = prev[prev.length - 1].time;
+        const nextHourNum = (parseInt(lastHour.split(':')[0]) + 2) % 24;
+        const nextHourStr = String(nextHourNum).padStart(2, '0') + ':00';
+        newArr.push({
+          time: nextHourStr,
+          inbound: Math.floor(450 + Math.random() * 1150),
+          outbound: Math.floor(550 + Math.random() * 1350)
+        });
+        return newArr;
       });
-      return newArr;
-    });
 
-    // 2. Fluctuating Zone Congestion percentages & picker allocation
-    setZonesState(prev => prev.map(zone => {
-      const delta = Math.floor(Math.random() * 11) - 5; // -5 to +5
-      const newCap = Math.min(99, Math.max(35, zone.capacity + delta));
-      const newRisk = newCap > 85 ? 'danger' : newCap > 70 ? 'warning' : 'success';
-      const newStatus = newRisk === 'danger' ? 'High Congestion' : newRisk === 'warning' ? 'Moderate Traffic' : 'Optimal';
-      return {
-        ...zone,
-        capacity: newCap,
-        pickers: Math.max(6, zone.pickers + (Math.random() > 0.5 ? 1 : -1)),
-        risk: newRisk,
-        status: newStatus
+      // 2. Fluctuating Zone Congestion percentages & picker allocation
+      setZonesState(prev => prev.map(zone => {
+        const delta = Math.floor(Math.random() * 11) - 5; // -5 to +5
+        const newCap = Math.min(99, Math.max(35, zone.capacity + delta));
+        const newRisk = newCap > 85 ? 'danger' : newCap > 70 ? 'warning' : 'success';
+        const newStatus = newRisk === 'danger' ? 'High Congestion' : newRisk === 'warning' ? 'Moderate Traffic' : 'Optimal';
+        return {
+          ...zone,
+          capacity: newCap,
+          pickers: Math.max(6, zone.pickers + (Math.random() > 0.5 ? 1 : -1)),
+          risk: newRisk,
+          status: newStatus
+        };
+      }));
+
+      // 3. Rolling SLA countdowns & Injecting new Orders into Watchlist
+      const orderBatchId = Math.floor(1000 + Math.random() * 9000);
+      const newUrgentOrder = {
+        id: `ORD-${orderBatchId}`,
+        sku: `SKU-INFLUX-${orderBatchId}`,
+        destination: ['Bengaluru (560001)', 'Delhi NCR (110001)', 'Mumbai (400001)', 'Pune (411001)'][Math.floor(Math.random() * 4)],
+        cutoff: '22 mins',
+        status: 'Critical',
+        zone: ['Zone A', 'Zone B', 'Zone C'][Math.floor(Math.random() * 3)]
       };
-    }));
 
-    // 3. Rolling SLA countdowns
-    setWatchlist(prev => prev.map(ord => {
-      if (ord.cutoff.includes('Expedited') || ord.cutoff.includes('BREACHED')) return ord;
-      let mins = 18;
-      if (ord.cutoff.includes('mins')) {
-        mins = Math.max(0, parseInt(ord.cutoff) - 6);
-      } else {
-        mins = 45;
-      }
-      if (mins <= 0) {
-        return { ...ord, cutoff: 'BREACHED', status: 'Critical SLA Breach' };
-      }
-      return { ...ord, cutoff: `${mins} mins`, status: mins < 15 ? 'Critical' : 'Urgent' };
-    }));
+      setWatchlist(prev => {
+        const updated = prev.map(ord => {
+          if (ord.cutoff.includes('Expedited') || ord.cutoff.includes('BREACHED') || ord.cutoff.includes('Rerouted')) return ord;
+          let mins = 18;
+          if (ord.cutoff.includes('mins')) {
+            mins = Math.max(0, parseInt(ord.cutoff) - 5);
+          } else {
+            mins = 45;
+          }
+          if (mins <= 0) {
+            return { ...ord, cutoff: 'BREACHED', status: 'Critical SLA Breach' };
+          }
+          return { ...ord, cutoff: `${mins} mins`, status: mins < 15 ? 'Critical' : 'Urgent' };
+        });
+        return [newUrgentOrder, ...updated.slice(0, 4)];
+      });
 
-    setLastSyncedTime(new Date().toLocaleTimeString());
-    showToast('🔄 Auto-Refresh & Time Drift Tick: Ingested +20 new entries & synchronized charts.');
+      // 4. Storage Capacity Dynamics (fluctuate between 80.0% and 95.0%)
+      const deltaCap = (Math.random() * 3.6 - 1.6);
+      const newCapacity = customPayload?.storageCapacity || Math.min(95.0, Math.max(80.0, +(storageCapacity + deltaCap).toFixed(1)));
+      setStorageCapacity(newCapacity);
+
+      // 5. Update stats count
+      setStats((prev: any) => ({
+        ...prev,
+        pendingOrders: (prev?.pendingOrders ? Number(prev.pendingOrders) + 3 : 1207),
+        throughput: (prev?.throughput ? Number(prev.throughput) + 18 : 8450),
+        inbound: (prev?.inbound ? Number(prev.inbound) + 1 : 25),
+        dispatches: (prev?.dispatches ? Number(prev.dispatches) + 2 : 14),
+        storageCapacity: newCapacity
+      }));
+
+      // 6. Ingest smart re-slotting trending SKU recommendation
+      setTrendingSkus(prev => {
+        const newSku = {
+          id: `SKU-INFLUX-${orderBatchId}`,
+          name: `High-Velocity Influx Item #${orderBatchId}`,
+          currentZone: 'Zone D',
+          velocity: `+${Math.floor(220 + Math.random() * 180)}% / hr`,
+          recommended: 'Zone A'
+        };
+        return [newSku, ...prev.slice(0, 2)];
+      });
+
+      setLastSyncedTime(new Date().toLocaleTimeString());
+
+      // If tick was not already triggered by backend API call, trigger backend sync
+      if (!customPayload) {
+        fetchApi('/system/stream-tick', { method: 'POST' }).catch(console.error);
+      }
+
+      // Detailed toast alert showing 20 records across all categories
+      showToast('⚡ 10-Min Influx Complete (+20 Records): 4 Orders & Reviews, 3 Dock Bookings, 3 SKU Restocks, 3 RTO Tickets, 5 Meal Orders, 4 Scan Audits.');
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   useEffect(() => {
     fetchApi('/dashboard/stats')
-      .then(setStats)
+      .then(data => {
+        setStats(data);
+        if (data?.storageCapacity) {
+          setStorageCapacity(Number(data.storageCapacity));
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
+  // 10-Minute Active Countdown Ticker
   useEffect(() => {
     if (autoRefreshInterval <= 0) return;
-    const timer = setInterval(executeRefreshTick, autoRefreshInterval);
-    return () => clearInterval(timer);
-  }, [autoRefreshInterval]);
+    const ticker = setInterval(() => {
+      setCountdownSeconds(prev => {
+        if (prev <= 1) {
+          executeRefreshTick();
+          return Math.floor(autoRefreshInterval / 1000);
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(ticker);
+  }, [autoRefreshInterval, storageCapacity]);
+
+  // Window event listener for simulation clicks
+  useEffect(() => {
+    const handleDataUpdate = (e: any) => {
+      executeRefreshTick(e?.detail);
+      setCountdownSeconds(autoRefreshInterval > 0 ? Math.floor(autoRefreshInterval / 1000) : 600);
+    };
+    window.addEventListener('wms-data-updated', handleDataUpdate);
+    return () => window.removeEventListener('wms-data-updated', handleDataUpdate);
+  }, [autoRefreshInterval, storageCapacity]);
+
+  const handleIntervalChange = (val: number) => {
+    setAutoRefreshInterval(val);
+    setCountdownSeconds(val > 0 ? Math.floor(val / 1000) : 0);
+    showToast(val > 0 ? `⏱️ 10-Min Influx Engine interval set to ${val === 600000 ? '10 Min' : val === 300000 ? '5 Min' : '20 Min'}` : '⏱️ Auto-Refresh paused');
+  };
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   const statCards = [
     { title: 'Pending Express Orders', value: stats?.pendingOrders || '1,204', change: '+14% vs yesterday', icon: Package, color: 'text-pink-600', bg: 'bg-pink-50' },
@@ -264,13 +358,123 @@ export function DashboardScreen() {
         </div>
       </div>
 
-      {/* Auto-Refresh & Time Drift Engine Controls */}
-      <div className="bg-slate-900 text-white px-6 py-3.5 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* SCHEDULED SITE MAINTENANCE ALERT NOTICE */}
+      {showMaintenanceNotice && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/15 to-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-5 shadow-lg relative overflow-hidden animate-in fade-in slide-in-from-top-3">
+          <div className="absolute top-0 right-0 w-80 h-full bg-amber-500/10 blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 relative z-10">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 bg-amber-500 text-white rounded-xl shadow-md shrink-0 mt-0.5 animate-bounce">
+                <Wrench size={24} />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="px-3 py-0.5 bg-amber-600 text-white font-black text-xs uppercase tracking-wider rounded-md shadow-sm flex items-center gap-1.5">
+                    <ShieldAlert size={14} />
+                    <span>SCHEDULED SITE MAINTENANCE</span>
+                  </span>
+                  <span className="text-xs font-mono font-extrabold px-2.5 py-0.5 bg-amber-100 text-amber-900 rounded-md border border-amber-300">
+                    WINDOW: TODAY, 11:30 PM – 01:30 AM IST (2 HRS)
+                  </span>
+                  <span className="text-xs px-2.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded-md border border-emerald-300 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                    <span>Systems Operational (Pre-Window)</span>
+                  </span>
+                </div>
+
+                <h3 className="text-base font-black text-amber-950">
+                  System Maintenance Scheduled for Infrastructure & Database Upgrades
+                </h3>
+
+                <p className="text-xs text-amber-900 leading-relaxed font-medium max-w-4xl">
+                  <strong>Reason for Maintenance:</strong> Scheduled hardware servicing, thermal POS barcode printer firmware updates, gate biometric controller sync optimization, and database index defragmentation in preparation for the upcoming <strong>Festival Peak Order Surge & High-Concurrency Shift Traffic</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-end md:self-start">
+              <button
+                type="button"
+                onClick={() => setExpandMaintenanceReason(!expandMaintenanceReason)}
+                className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs rounded-xl border border-amber-300 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Clock size={13} className="text-amber-700" />
+                <span>{expandMaintenanceReason ? 'Hide Impact Details' : 'View Impact & Reason'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMaintenanceNotice(false);
+                  showToast('Acknowledged Maintenance Notice.');
+                }}
+                className="p-1.5 text-amber-800 hover:text-amber-950 hover:bg-amber-200/60 rounded-lg transition-all cursor-pointer"
+                title="Dismiss Notice"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Expanded Maintenance Breakdown & Contingency Plan */}
+          {expandMaintenanceReason && (
+            <div className="mt-4 pt-4 border-t border-amber-300/50 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 bg-white/80 border border-amber-200 rounded-xl space-y-1">
+                <div className="font-extrabold text-amber-950 flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-amber-600" />
+                  <span>Key Reason & Upgrades</span>
+                </div>
+                <p className="text-amber-900 text-[11px] leading-snug">
+                  Upgrading database index trees and thermal printing queues to boost voucher generation capacity from 5,000 to 25,000 tokens/hr.
+                </p>
+              </div>
+
+              <div className="p-3 bg-white/80 border border-amber-200 rounded-xl space-y-1">
+                <div className="font-extrabold text-amber-950 flex items-center gap-1.5">
+                  <Wrench size={14} className="text-amber-600" />
+                  <span>Impacted Modules</span>
+                </div>
+                <ul className="text-amber-900 text-[11px] space-y-0.5 list-disc list-inside">
+                  <li>POS Counter Scanners (11:30 PM - 01:30 AM)</li>
+                  <li>Live Biometric Gate Sync (Batch re-synced at 01:30 AM)</li>
+                </ul>
+              </div>
+
+              <div className="p-3 bg-white/80 border border-amber-200 rounded-xl space-y-1">
+                <div className="font-extrabold text-amber-950 flex items-center gap-1.5">
+                  <CheckCircle2 size={14} className="text-emerald-600" />
+                  <span>Contingency & Action</span>
+                </div>
+                <p className="text-amber-900 text-[11px] leading-snug">
+                  Physical printed passes & manual Desk 01 backup active. Pre-orders placed before 11:00 PM will be auto-dispatched.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Auto-Refresh & 10-Min Influx Engine Controls */}
+      <div className="bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-sm flex flex-col lg:flex-row items-center justify-between gap-4 border border-slate-800">
         <div className="flex items-center gap-3">
-          <Clock size={18} className="text-pink-400 animate-spin" />
+          <div className="p-2 bg-pink-500/10 rounded-xl border border-pink-500/20">
+            <Clock size={20} className="text-pink-400 animate-spin" />
+          </div>
           <div>
-            <h4 className="text-xs font-bold tracking-wider uppercase text-slate-300">Auto-Refresh & Time Drift Engine</h4>
-            <p className="text-[11px] text-slate-400">Last Synced: <span className="font-mono text-white">{lastSyncedTime}</span></p>
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs font-bold tracking-wider uppercase text-slate-200">10-Min Periodic Influx Engine</h4>
+              {autoRefreshInterval > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                  <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping"></span>
+                  Next Influx in: {formatCountdown(countdownSeconds)}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Automated multi-module sync (+20 records) • Last Synced: <span className="font-mono text-white font-bold">{lastSyncedTime}</span>
+            </p>
           </div>
         </div>
 
@@ -284,27 +488,16 @@ export function DashboardScreen() {
           ].map(opt => (
             <button
               key={opt.label}
-              onClick={() => {
-                setAutoRefreshInterval(opt.value);
-                showToast(`⏱️ Auto-Refresh interval set to ${opt.label}`);
-              }}
+              onClick={() => handleIntervalChange(opt.value)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 autoRefreshInterval === opt.value
-                  ? 'bg-pink-600 text-white shadow-md'
+                  ? 'bg-pink-600 text-white shadow-md ring-2 ring-pink-400/30'
                   : 'bg-white/10 text-slate-300 hover:bg-white/20'
               }`}
             >
               {opt.label}
             </button>
           ))}
-
-          <button
-            onClick={executeRefreshTick}
-            className="ml-2 px-3.5 py-1.5 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-400 hover:to-rose-500 text-white text-xs font-black rounded-xl shadow-lg transition-all flex items-center gap-1.5"
-          >
-            <Zap size={14} />
-            <span>Force Refresh Tick (+20)</span>
-          </button>
         </div>
       </div>
 
@@ -352,18 +545,27 @@ export function DashboardScreen() {
               })}
             </div>
 
-            {/* Circular Storage Capacity Gauge */}
+            {/* Circular Dynamic Storage Capacity Gauge */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center relative">
-               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 self-start">Storage Capacity</h3>
+               <div className="w-full flex items-center justify-between mb-2">
+                 <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Storage Capacity</h3>
+                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                   storageCapacity >= 90 ? 'bg-red-100 text-red-700 animate-pulse' :
+                   storageCapacity >= 85 ? 'bg-amber-100 text-amber-700' :
+                   'bg-pink-100 text-[#f43397]'
+                 }`}>
+                   {storageCapacity >= 90 ? 'High Fill' : 'Dynamic Scale'}
+                 </span>
+               </div>
                <div className="relative flex items-center justify-center my-1">
                  <svg height="110" width="110" className="rotate-[-90deg]">
                    <circle stroke="#f3f4f6" fill="transparent" strokeWidth="10" r="44" cx="55" cy="55" />
                    <circle
-                     stroke="#f43397"
+                     stroke={storageCapacity >= 90 ? '#ef4444' : storageCapacity >= 85 ? '#f59e0b' : '#f43397'}
                      fill="transparent"
                      strokeWidth="10"
                      strokeDasharray={276.46}
-                     strokeDashoffset={276.46 - (84.5 * 276.46) / 100}
+                     strokeDashoffset={276.46 - (storageCapacity * 276.46) / 100}
                      strokeLinecap="round"
                      r="44"
                      cx="55"
@@ -372,12 +574,13 @@ export function DashboardScreen() {
                    />
                  </svg>
                  <div className="absolute flex flex-col items-center justify-center text-center">
-                    <span className="text-2xl font-black text-gray-900">84.5%</span>
+                    <span className="text-2xl font-black text-gray-900">{storageCapacity.toFixed(1)}%</span>
+                    <span className="text-[9px] font-bold text-gray-400 uppercase">Utilized</span>
                  </div>
                </div>
                <div className="mt-2 flex justify-between w-full text-xs font-semibold px-1">
-                  <span className="text-gray-500">Used: <span className="text-gray-900">84.5k</span></span>
-                  <span className="text-gray-500">Max: <span className="text-gray-900">100k</span></span>
+                  <span className="text-gray-500">Used: <span className="text-gray-900">{Math.round(storageCapacity * 1000).toLocaleString()} sq.ft</span></span>
+                  <span className="text-gray-500">Max: <span className="text-gray-900">100,000 sq.ft</span></span>
                </div>
             </div>
           </div>
@@ -910,6 +1113,7 @@ export function DashboardScreen() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
